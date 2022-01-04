@@ -60,6 +60,9 @@ class RSS(object):
         self.first_read_subtracted = False
         self.first_read = None
 
+        self.nonlin_fn = None
+        self.nonlinearity_cube = None
+
         self.get_full_filelist()
 
     def get_full_filelist(self):
@@ -67,11 +70,11 @@ class RSS(object):
         fullpath = os.path.abspath(self.fn)
         print(fullpath)
         self.basedir, _fn = os.path.split(fullpath)
-        filebase = ".".join(_fn.split(".")[:-2])
+        self.filebase = ".".join(_fn.split(".")[:-2])
         # print(self.basedir, filebase)
 
         for _read in range(1,100):
-            filename = "%s.%d.fits" % (filebase, _read)
+            filename = "%s.%d.fits" % (self.filebase, _read)
             full_filename = os.path.join(self.basedir, filename)
             if (os.path.isfile(full_filename)):
                 self.filelist.append(full_filename)
@@ -96,7 +99,7 @@ class RSS(object):
         self._image_stack = []
 
         # open all frames
-        for fn in self.filelist[:40]:
+        for fn in self.filelist[:50]:
             hdulist = pyfits.open(fn)
             # hdulist.info()
             imgdata = hdulist[0].data
@@ -117,7 +120,13 @@ class RSS(object):
         self.subtract_first_read()
 
         # calculate differential stack
-        self.differential_stack = numpy.diff(self.image_stack, axis=0)
+        linearized = self.apply_nonlinearity_corrections()
+        if (linearized is None):
+            print("No linearized data found, using raw data instead")
+            linearized = self.image_stack
+
+        #self.image_stack
+        self.differential_stack = numpy.diff(linearized, axis=0)
         print(self.differential_stack.shape)
 
         # mask out all saturated and/or otherwise bad samples
@@ -129,11 +138,15 @@ class RSS(object):
         image = numpy.nanmean(self.clean_stack, axis=0)
         print(image.shape)
 
+        ratios = linearized / linearized[3:4, :, :]
 
         if (write_dumps):
-            pyfits.PrimaryHDU(data=self.image_stack).writeto("stack_image.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.image_stack+self.first_read).writeto("stack_raw.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.image_stack).writeto("stack_zerosub.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=linearized).writeto("stack_linearized.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.differential_stack).writeto("stack_diff.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.clean_stack).writeto("stack_clean.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
             pyfits.PrimaryHDU(data=image).writeto("final_image.fits", overwrite=True)
 
         return
@@ -303,6 +316,38 @@ class RSS(object):
         pyfits.PrimaryHDU(data=nonlinearity_fits_inverse).writeto("nonlin_inverse.fits", overwrite=True)
         return
 
+    def read_nonlinearity_corrections(self, nonlin_fn):
+
+        if (os.path.isfile(nonlin_fn)):
+            try:
+                hdulist = pyfits.open(nonlin_fn)
+                print("Reading nonlinearity corrections from %s" % (nonlin_fn))
+                nonlinearity_cube = hdulist[0].data
+                print("CORR shape:", nonlinearity_cube.shape)
+            except:
+                return False
+
+        self.nonlin_fn = nonlin_fn
+        self.nonlinearity_cube = nonlinearity_cube
+
+    def apply_nonlinearity_corrections(self):
+
+        if (self.nonlinearity_cube is None):
+            print("No nonlinearity corrections loaded, skipping")
+            return None
+
+        self.subtract_first_read()
+
+        img_cube = self.image_stack
+        print("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
+
+        linearized_cube = \
+            self.nonlinearity_cube[0:1, :, :] * img_cube + \
+            self.nonlinearity_cube[1:2, :, :] * numpy.power(img_cube, 2) + \
+            self.nonlinearity_cube[2:3, :, :] * numpy.power(img_cube, 3)
+
+        return linearized_cube
+
 
     def write_results(self, fn=None):
         return
@@ -323,7 +368,9 @@ if __name__ == "__main__":
 
     fn = sys.argv[1]
     rss = RSS(fn)
-    rss.reduce(write_dumps=False)
+    rss.read_nonlinearity_corrections("nonlin_inverse.fits")
+    # rss.read_nonlinearity_corrections("nonlin3d.fits")
+    rss.reduce(write_dumps=True)
     rss.write_results()
 
     rss.plot_pixel_curve(818,1033)
