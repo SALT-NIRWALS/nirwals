@@ -134,23 +134,38 @@ class RSS(object):
         self.subtract_first_read()
 
         # calculate differential stack
+        print("Applying non-linearity corrections")
         linearized = self.apply_nonlinearity_corrections()
+        # print("linearized = ", linearized)
         if (linearized is None):
             print("No linearized data found, using raw data instead")
             linearized = self.image_stack
+        self.linearized_cube = linearized
 
         #self.image_stack
-        self.differential_stack = numpy.diff(linearized, axis=0)
-        print(self.differential_stack.shape)
+        self.differential_stack = numpy.pad(numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0)))
+        print("diff stack:", self.differential_stack.shape)
 
         # mask out all saturated and/or otherwise bad samples
-        bad_data = (self.image_stack > 60000)
+        max_count_rates = numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
+        print(max_count_rates.shape)
+
+        # TODO: implement full iterative outlier rejection here
+        bad_data = ((self.image_stack + self.first_read) > self.saturation_level) | (self.differential_stack < self.saturation_fraction*max_count_rates)
         self.clean_stack = self.differential_stack.copy()
-        self.clean_stack[bad_data[1:]] = numpy.NaN
+        self.clean_stack[bad_data] = numpy.NaN
+        self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
 
         # calculate a average countrate image
+        image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
         image = numpy.nanmean(self.clean_stack, axis=0)
-        print(image.shape)
+        noise = numpy.sqrt((self.image_stack + self.first_read))
+        noise[bad_data] = numpy.NaN
+        noise[0, :, :] = numpy.NaN
+        inv_noise = numpy.nansum(1./noise, axis=0)
+        weighted_mean = numpy.nansum(self.clean_stack / noise, axis=0) / inv_noise
+        noise_image = 1. / inv_noise
+        # print(image.shape)
 
         ratios = linearized / linearized[3:4, :, :]
 
@@ -162,6 +177,11 @@ class RSS(object):
             pyfits.PrimaryHDU(data=self.clean_stack).writeto("stack_clean.fits", overwrite=True)
             pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
             pyfits.PrimaryHDU(data=image).writeto("final_image.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=image7).writeto("final_image7.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=max_count_rates).writeto("max_count_rates.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=bad_data.astype(numpy.int)).writeto("bad_data.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=weighted_mean).writeto("final_image_weighted.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=inv_noise).writeto("final_inv_noise.fits", overwrite=True)
 
         return
 
@@ -175,7 +195,6 @@ class RSS(object):
 
         self.image_stack -= self.first_read
         self.first_read_subtracted = True
-
 
     def _nonlinearity_fit_fct(self, p, x):
         y = numpy.zeros(x.shape)
@@ -422,7 +441,6 @@ class RSS(object):
 
         return linearized_cube
 
-
     def write_results(self, fn=None):
         return
 
@@ -453,9 +471,9 @@ class RSS(object):
 if __name__ == "__main__":
 
     fn = sys.argv[1]
-    rss = RSS(fn)
-    rss.read_nonlinearity_corrections("nonlin_inverse.fits")
-    # rss.read_nonlinearity_corrections("nonlin3d.fits")
+    rss = RSS(fn, max_number_files=40)
+    # rss.read_nonlinearity_corrections("nonlin_inverse.fits")
+    rss.read_nonlinearity_corrections("nonlin3d.fits")
     rss.reduce(write_dumps=True)
     rss.write_results()
 
