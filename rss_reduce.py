@@ -9,6 +9,7 @@ import scipy
 import scipy.optimize
 import itertools
 import multiprocessing
+import argparse
 
 from astropy import log
 log.setLevel('ERROR')
@@ -470,15 +471,34 @@ class RSS(object):
 
 if __name__ == "__main__":
 
-    fn = sys.argv[1]
-    rss = RSS(fn, max_number_files=40)
-    # rss.read_nonlinearity_corrections("nonlin_inverse.fits")
-    rss.read_nonlinearity_corrections("nonlin3d.fits")
-    rss.reduce(write_dumps=True)
-    rss.write_results()
+    cmdline = argparse.ArgumentParser()
+    cmdline.add_argument("--maxfiles", dest="max_number_files", default=None, type=int,
+                         help="limit number of files to load for processing")
+    cmdline.add_argument("--nonlinearity", dest="nonlinearity_fn", type=str, default=None,
+                         help="non-linearity correction coefficients (3-d FITS cube)")
+    cmdline.add_argument("--flat", dest="flatfield_fn", type=str, default=None,
+                         help="calibration flatfield")
+    # cmdline.add_argument("healpix32", nargs="+", type=int,
+    #                      help="list of input filenames")
+    # cmdline.add_argument("--rerun", type=int, default=6,
+    #                      help="rerun")
+    cmdline.add_argument("--dumps", dest="write_dumps", default=False, action='store_true',
+                         help="write intermediate process data [default: NO]")
+    cmdline.add_argument("files", nargs="+",
+                         help="list of input filenames")
+    args = cmdline.parse_args()
 
-    rss.plot_pixel_curve(818,1033)
-    rss.plot_pixel_curve(1700,555)
-    rss.plot_pixel_curve(250,1660)
+    for fn in args.files:
+        # fn = sys.argv[1]
 
-    print("all done!")
+        rss = RSS(fn, max_number_files=args.max_number_files)
+        if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
+            rss.read_nonlinearity_corrections(args.nonlinearity_fn)
+        rss.reduce(write_dumps=args.write_dumps)
+        rss.write_results()
+
+        rss.plot_pixel_curve(818,1033)
+        rss.plot_pixel_curve(1700,555)
+        rss.plot_pixel_curve(250,1660)
+
+        print("all done!")
