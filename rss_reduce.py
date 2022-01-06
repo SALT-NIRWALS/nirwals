@@ -430,10 +430,22 @@ class RSS(object):
 
         self.subtract_first_read()
         counts = self.image_stack[:, y-1, x-1]
+        zerolevel = self.first_read[y-1,x-1]
+        frame_number = numpy.arange(counts.shape[0])
+        if (hasattr(self, "linearized_cube")):
+            linearized_counts = self.linearized_cube[:, y - 1, x - 1]
+        else:
+            linearized_counts = counts
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.scatter(numpy.arange(counts.shape[0]), counts)
+        ax.scatter(frame_number, counts+zerolevel, s=4, label='raw')
+        ax.scatter(frame_number, counts, s=4, label='raw, zerosub')
+        ax.scatter(frame_number, linearized_counts, s=4, label='linearized, zerosub')
+        ax.scatter(frame_number, linearized_counts+zerolevel, s=4, label='linearized')
+
+        ax.axhline(y=63000, linestyle=":", color='grey')
+
         fig.savefig("pixelcurve_x%04d_y%04d.png" % (x,y))
 
 
@@ -449,6 +461,6 @@ if __name__ == "__main__":
 
     rss.plot_pixel_curve(818,1033)
     rss.plot_pixel_curve(1700,555)
-
+    rss.plot_pixel_curve(250,1660)
 
     print("all done!")
