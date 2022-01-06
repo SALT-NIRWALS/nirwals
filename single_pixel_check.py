@@ -77,6 +77,8 @@ if __name__ == "__main__":
                      diffs, bad.astype(numpy.int)]).T
     )
 
+    last_good_sample = numpy.max(integrations_count[~bad])
+    print("last good sample:", last_good_sample)
     # make plot with all information
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -87,11 +89,12 @@ if __name__ == "__main__":
     ax.plot(integrations_count, best_fit_direct, label="fit")
     ax.plot(integrations_count, computed_countrate, label='constant rate')
     ax.scatter(integrations_count, linearized, s=8, label='non-lin corrected')
-    ax.scatter(integrations_count, linearized+raw_series[0], s=3)
+    ax.scatter(integrations_count, linearized + raw_series[0], s=3)
     ax.legend()
     ax.set_ylim((-500, 74000))
-    ax.set_xlim((-0.5, numpy.max(integrations_count)+2.5))
+    ax.set_xlim((-0.5, numpy.max(integrations_count) + 2.5))
     ax.axhline(y=63000, linestyle=':', color='grey')
+    ax.axvline(x=last_good_sample + 0.5, linestyle=":", color='grey')
     ax.set_xlabel("Read")
     ax.set_ylabel("counts [raw/corrected]")
     fig.suptitle("x=%d  y=%d" % (x,y))
