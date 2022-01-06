@@ -52,7 +52,9 @@ print(astropy.__path__)
 
 class RSS(object):
 
-    def __init__(self, fn):
+    def __init__(self, fn, max_number_files=-1,
+                 saturation_level=60000,
+                 saturation_fraction=0.25, saturation_percentile=95):
         self.fn = fn
         self.filelist = []
 
@@ -62,6 +64,12 @@ class RSS(object):
 
         self.nonlin_fn = None
         self.nonlinearity_cube = None
+
+        # store values we may/will need during reduction
+        self.max_number_files = max_number_files
+        self.saturation_level = saturation_level
+        self.saturation_fraction = saturation_fraction
+        self.saturation_percentile = saturation_percentile
 
         self.get_full_filelist()
 
@@ -90,8 +98,10 @@ class RSS(object):
     def add_file(self, filename):
         return
 
-    def load_all_files(self):
+    def load_all_files(self, max_number_files=None):
 
+        if (max_number_files is None):
+            max_number_files = self.max_number_files
         if (self.image_stack_initialized):
             print("stack already initialized, skipping repeat try")
             return
@@ -99,7 +109,11 @@ class RSS(object):
         self._image_stack = []
 
         # open all frames
-        for fn in self.filelist[:50]:
+        _filelist = self.filelist
+        if (max_number_files > 0):
+            print("Limiting filelist to %d frames" % (max_number_files))
+            _filelist = _filelist[:max_number_files]
+        for fn in _filelist:
             hdulist = pyfits.open(fn)
             # hdulist.info()
             imgdata = hdulist[0].data
