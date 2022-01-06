@@ -159,13 +159,13 @@ class RSS(object):
 
         # calculate a average countrate image
         image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
-        image = numpy.nanmean(self.clean_stack, axis=0)
+        self.reduced_image_plain = numpy.nanmean(self.clean_stack, axis=0)
         noise = numpy.sqrt((self.image_stack + self.first_read))
         noise[bad_data] = numpy.NaN
         noise[0, :, :] = numpy.NaN
-        inv_noise = numpy.nansum(1./noise, axis=0)
-        weighted_mean = numpy.nansum(self.clean_stack / noise, axis=0) / inv_noise
-        noise_image = 1. / inv_noise
+        self.inv_noise = numpy.nansum(1./noise, axis=0)
+        self.weighted_mean = numpy.nansum(self.clean_stack / noise, axis=0) / self.inv_noise
+        self.noise_image = 1. / self.inv_noise
         # print(image.shape)
 
         ratios = linearized / linearized[3:4, :, :]
@@ -177,12 +177,12 @@ class RSS(object):
             pyfits.PrimaryHDU(data=self.differential_stack).writeto("stack_diff.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.clean_stack).writeto("stack_clean.fits", overwrite=True)
             pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=image).writeto("final_image.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.reduced_image_plain).writeto("final_image.fits", overwrite=True)
             pyfits.PrimaryHDU(data=image7).writeto("final_image7.fits", overwrite=True)
             pyfits.PrimaryHDU(data=max_count_rates).writeto("max_count_rates.fits", overwrite=True)
             pyfits.PrimaryHDU(data=bad_data.astype(numpy.int)).writeto("bad_data.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=weighted_mean).writeto("final_image_weighted.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=inv_noise).writeto("final_inv_noise.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.weighted_mean).writeto("final_image_weighted.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.inv_noise).writeto("final_inv_noise.fits", overwrite=True)
 
         return
 
@@ -443,6 +443,15 @@ class RSS(object):
         return linearized_cube
 
     def write_results(self, fn=None):
+        if (fn is None):
+            fn = os.path.join(self.basedir, self.filebase) + "reduced.fits"
+        hdulist = pyfits.HDUList([
+            pyfits.PrimaryHDU(), #header=self.primary_header)
+            pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
+            pyfits.ImageHDU(data=self.noise_image, name='NOISE')
+        ])
+        print("Writing reduced results to %s" % (fn))
+        hdulist.writeto(fn, overwrite=True)
         return
 
     def plot_pixel_curve(self, x, y):
