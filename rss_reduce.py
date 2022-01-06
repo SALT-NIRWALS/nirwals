@@ -168,6 +168,7 @@ class RSS(object):
         for i in range(p.shape[0]):
             y += p[i] * x**(i+1)
         return y
+
     def _nonlinearity_fit_err_fct(self, p, x, y):
         yfit = self._nonlinearity_fit_fct(p, x)
         err = numpy.sqrt(y + 10 ** 2)
@@ -205,25 +206,25 @@ class RSS(object):
 
     def fit_nonlinearity(self, ref_frame_id=10, max_linear=50000, make_plot=False):
 
-        self.subtract_first_read()
-        if (self.first_read_subtracted):
-            bad_data = (self.image_stack + self.first_read) > max_linear
-        else:
-            bad_data = self.image_stack > max_linear
-
-        # normalize each image with the N-th frame to take out a linear slope
-        # normalized = self.image_stack / (self.image_stack[ref_frame_id] / ref_frame_id)
-
-        # mask out all pixels above a saturation level
-        # normalized[bad_data] = numpy.NaN
-
-        masked = self.image_stack.copy()
-        masked[bad_data] = numpy.NaN
-
-        linearized_intensity = numpy.arange(masked.shape[0]).reshape((-1,1,1)) * (self.image_stack[ref_frame_id:ref_frame_id+1] / ref_frame_id)
-        print(linearized_intensity.shape)
-        pyfits.PrimaryHDU(data=linearized_intensity).writeto("linearized.fits", overwrite=True)
-
+        # self.subtract_first_read()
+        # if (self.first_read_subtracted):
+        #     bad_data = (self.image_stack + self.first_read) > max_linear
+        # else:
+        #     bad_data = self.image_stack > max_linear
+        #
+        # # normalize each image with the N-th frame to take out a linear slope
+        # # normalized = self.image_stack / (self.image_stack[ref_frame_id] / ref_frame_id)
+        #
+        # # mask out all pixels above a saturation level
+        # # normalized[bad_data] = numpy.NaN
+        #
+        # masked = self.image_stack.copy()
+        # masked[bad_data] = numpy.NaN
+        #
+        # linearized_intensity = numpy.arange(masked.shape[0]).reshape((-1,1,1)) * (self.image_stack[ref_frame_id:ref_frame_id+1] / ref_frame_id)
+        # print(linearized_intensity.shape)
+        # pyfits.PrimaryHDU(data=linearized_intensity).writeto("linearized.fits", overwrite=True)
+        #
 
         # now fit a each pixel
 
@@ -273,10 +274,13 @@ class RSS(object):
 
             print("results_parallel=\n", results_parallel)
         else:
-            nonlinearity_fits_3d = numpy.zeros((3, masked.shape[1], masked.shape[2]))
-            nonlinearity_fits_inverse = numpy.zeros((3, masked.shape[1], masked.shape[2]))
-            for (ix,iy) in itertools.product(range(masked.shape[1]),
-                                             range(masked.shape[2])):
+            cube_shape = self.image_stack.shape
+            nonlinearity_fits_3d = numpy.zeros((3, cube_shape[1], cube_shape[2]))
+            nonlinearity_fits_inverse = numpy.zeros((3, cube_shape[1], cube_shape[2]))
+            for (ix, iy) in itertools.product(range(cube_shape[1]),
+                                              range(cube_shape[2])):
+            # for (ix, iy) in itertools.product(range(250,cube_shape[1],5),
+            #                                   range(250,cube_shape[2],5)):
                 if (iy == 0):
                     sys.stdout.write("\rWorking on column % 4d" % (ix))
                     sys.stdout.flush()
@@ -289,23 +293,79 @@ class RSS(object):
                 # sys.stdout.flush()
                 # print(ix, iy)
 
-                _x = masked[:, iy, ix]
-                _y = linearized_intensity[:, iy, ix]
-                pfit = self._fit_nonlinearity_pixel(_x, _y)
-                if (pfit is not None):
-                    nonlinearity_fits_3d[:, iy:iy+4, ix:ix+4] = pfit.reshape((-1,1,1))
+                # extract data for this pixel
+                raw_series = self.image_stack[:, iy, ix]
+                series = raw_series - raw_series[0]
 
-                pfit_inverse = self._fit_nonlinearity_pixel(_y, _x)
+                diffs = numpy.pad(numpy.diff(raw_series), (1, 0))
+                # print(diffs.shape, series.shape)
+
+                # flag bad/saturated pixels
+                max_diff = numpy.nanpercentile(diffs, 90)
+                bad = (raw_series > 63000) | (diffs < 0.3 * max_diff)
+
+                n_good = numpy.sum(~bad)
+                if (n_good < 5):
+                    continue
+
+                avg_rate = series[10] / 10.
+                # print(avg_rate)
+
+                # perform initial fit to obtain a best-possible linear countrate
+                integrations_count = numpy.arange(series.shape[0])
+                pfit2 = self._fit_nonlinearity_pixel(integrations_count[~bad], series[~bad])
+                best_fit_direct = pfit2[0] * integrations_count + \
+                                  pfit2[1] * numpy.power(integrations_count, 2) + \
+                                  pfit2[2] * numpy.power(integrations_count, 3)
+
+                integrations_count = numpy.arange(series.shape[0])
+                computed_countrate = integrations_count * pfit2[0]
+
+                last_good_sample = numpy.max(integrations_count[~bad])
+
+                # fit the non-linearity correction
+                # print("Fitting pixel")
+                pfit = self._fit_nonlinearity_pixel(series[~bad], computed_countrate[~bad])
+                linearized = pfit[0] * numpy.power(series, 1) + \
+                             pfit[1] * numpy.power(series, 2) + \
+                             pfit[2] * numpy.power(series, 3)
+
+                # _x = masked[:, iy, ix]
+                # _y = linearized_intensity[:, iy, ix]
+                # pfit = self._fit_nonlinearity_pixel(_x, _y)
                 if (pfit is not None):
-                    nonlinearity_fits_inverse[:, iy:iy+4, ix:ix+4] = pfit_inverse.reshape((-1,1,1))
+                    # nonlinearity_fits_3d[:, iy:iy+4, ix:ix+4] = pfit.reshape((-1,1,1))
+                    nonlinearity_fits_3d[:, iy, ix] = pfit #.reshape((-1,1,1))
+
+                pfit_inverse = self._fit_nonlinearity_pixel(computed_countrate[~bad], series[~bad])
+                if (pfit is not None):
+                    # nonlinearity_fits_inverse[:, iy:iy+4, ix:ix+4] = pfit_inverse.reshape((-1,1,1))
+                    nonlinearity_fits_inverse[:, iy, ix] = pfit_inverse #.reshape((-1,1,1))
 
                 if (make_plot):
                     fig = plt.figure()
-                    ax = fig.add_subplot()
-                    ax.scatter(_x, _y)
-                    ax.plot(_x, self._nonlinearity_fit_fct(pfit, _x))
+                    ax = fig.add_subplot(111)
+                    # ax.scatter(_x, _y)
+                    # ax.plot(_x, self._nonlinearity_fit_fct(pfit, _x))
+
+                    ax.scatter(integrations_count, raw_series, s=4, label="raw data")
+                    ax.scatter(integrations_count, series, s=8, label="zero subtracted")
+                    ax.scatter(integrations_count[bad], series[bad], c='grey', marker='x', s=16, label='bad',
+                               linewidth=1)
+                    ax.plot(integrations_count, best_fit_direct, label="fit")
+                    ax.plot(integrations_count, computed_countrate, label='constant rate')
+                    ax.scatter(integrations_count, linearized, s=8, label='non-lin corrected')
+                    ax.scatter(integrations_count, linearized + raw_series[0], s=3)
+                    ax.legend()
+                    ax.set_ylim((-500, 74000))
+                    ax.set_xlim((-0.5, numpy.max(integrations_count) + 2.5))
+                    ax.axhline(y=63000, linestyle=':', color='grey')
+                    ax.axvline(x=last_good_sample + 0.5, linestyle=":", color='grey')
+                    ax.set_xlabel("Read")
+                    ax.set_ylabel("counts [raw/corrected]")
+                    fig.tight_layout()
                     fig.suptitle("y = %+.4g*x %+.4g*x^2 %+.4g*x^3" % (pfit[0], pfit[1], pfit[2]))
-                    fig.savefig("nonlin__x%04d__y%04d.png" % (ix, iy))
+                    fig.savefig("nonlin_plots/nonlin__x%04d__y%04d.png" % (ix, iy))
                     plt.close(fig)
 
             #break
@@ -342,7 +402,7 @@ class RSS(object):
         print("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
 
         linearized_cube = \
-            self.nonlinearity_cube[0:1, :, :] * img_cube + \
+            self.nonlinearity_cube[0:1, :, :] * numpy.power(img_cube, 1) + \
             self.nonlinearity_cube[1:2, :, :] * numpy.power(img_cube, 2) + \
             self.nonlinearity_cube[2:3, :, :] * numpy.power(img_cube, 3)
 
