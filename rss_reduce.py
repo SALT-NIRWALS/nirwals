@@ -62,12 +62,13 @@ class RSS(object):
         self.image_stack_initialized = False
         self.first_read_subtracted = False
         self.first_read = None
+        self.first_header = None
 
         self.nonlin_fn = None
         self.nonlinearity_cube = None
 
         # store values we may/will need during reduction
-        self.max_number_files = max_number_files
+        self.max_number_files = -1 if max_number_files is None else max_number_files
         self.saturation_level = saturation_level
         self.saturation_fraction = saturation_fraction
         self.saturation_percentile = saturation_percentile
@@ -119,6 +120,8 @@ class RSS(object):
             # hdulist.info()
             imgdata = hdulist[0].data
             self._image_stack.append(imgdata)
+            if  (self.first_header is None):
+                self.first_header = hdulist[0].header
             # break
 
         # calculate the initial image stack
@@ -152,7 +155,8 @@ class RSS(object):
         print(max_count_rates.shape)
 
         # TODO: implement full iterative outlier rejection here
-        bad_data = ((self.image_stack + self.first_read) > self.saturation_level) | (self.differential_stack < self.saturation_fraction*max_count_rates)
+        bad_data = ((self.image_stack + self.first_read) > self.saturation_level) | \
+                   (self.differential_stack < self.saturation_fraction*max_count_rates)
         self.clean_stack = self.differential_stack.copy()
         self.clean_stack[bad_data] = numpy.NaN
         self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
@@ -168,7 +172,7 @@ class RSS(object):
         self.noise_image = 1. / self.inv_noise
         # print(image.shape)
 
-        ratios = linearized / linearized[3:4, :, :]
+        # ratios = linearized / linearized[3:4, :, :]
 
         if (write_dumps):
             pyfits.PrimaryHDU(data=self.image_stack+self.first_read).writeto("stack_raw.fits", overwrite=True)
@@ -176,7 +180,7 @@ class RSS(object):
             pyfits.PrimaryHDU(data=linearized).writeto("stack_linearized.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.differential_stack).writeto("stack_diff.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.clean_stack).writeto("stack_clean.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
+            # pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.reduced_image_plain).writeto("final_image.fits", overwrite=True)
             pyfits.PrimaryHDU(data=image7).writeto("final_image7.fits", overwrite=True)
             pyfits.PrimaryHDU(data=max_count_rates).writeto("max_count_rates.fits", overwrite=True)
@@ -444,7 +448,7 @@ class RSS(object):
 
     def write_results(self, fn=None):
         if (fn is None):
-            fn = os.path.join(self.basedir, self.filebase) + "reduced.fits"
+            fn = os.path.join(self.basedir, self.filebase) + ".reduced.fits"
         hdulist = pyfits.HDUList([
             pyfits.PrimaryHDU(), #header=self.primary_header)
             pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
