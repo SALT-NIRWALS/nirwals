@@ -138,7 +138,7 @@ class RSS(object):
 
         self.image_stack_initialized = True
 
-    def reduce(self, write_dumps=False):
+    def reduce(self, dark_fn=None, write_dumps=False):
 
         self.load_all_files()
 
@@ -148,9 +148,6 @@ class RSS(object):
         reset_frame_subtracted = self.image_stack - self.reset_frame
 
         # apply any necessary corrections for nonlinearity and other things
-        self.subtract_first_read()
-
-        # calculate differential stack
         print("Applying non-linearity corrections")
         linearized = self.apply_nonlinearity_corrections(reset_frame_subtracted)
         # print("linearized = ", linearized)
@@ -159,17 +156,39 @@ class RSS(object):
             linearized = reset_frame_subtracted
         self.linearized_cube = linearized
 
-        #self.image_stack
+        dark_cube = numpy.zeros_like(linearized)
+        if (dark_fn is not None and os.path.isfile(dark_fn)):
+            try:
+                # load dark-rate image
+                dark_hdu = pyfits.open(dark_fn)
+                dark = dark_hdu['DARKRATE'].data
+
+                # perform a dark subtraction;
+                # dark-current = rate [in cts/sec] * frame-# * exposure-time per frame [in sec]
+                dark_cube = (numpy.arange(linearized.shape[0], dtype=numpy.float).reshape((-1,1,1)) + 1) \
+                            * self.diff_exptime \
+                            * dark.reshape((1, dark.shape[0], dark.shape[1]))
+                print("shape of dark cube: ", dark_cube.shape)
+                linearized -= dark_cube
+            except Exception as e:
+                print("error during dark subtraction:\n",e)
+
+        # calculate differential stack
         self.differential_stack = numpy.pad(numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0)))
         print("diff stack:", self.differential_stack.shape)
 
         # mask out all saturated and/or otherwise bad samples
-        max_count_rates = numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
-        print(max_count_rates.shape)
+        max_count_rates = -1000 # TODO: FIX THIS numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
+        # print("max counrates:", max_count_rates.shape)
 
         # TODO: implement full iterative outlier rejection here
-        bad_data = ((self.image_stack + self.first_read) > self.saturation_level) | \
-                   (self.differential_stack < self.saturation_fraction*max_count_rates)
+        print("Identifying bad pixels")
+        bad_data = (self.image_stack > self.saturation_level) | \
+                   (self.differential_stack < self.saturation_fraction*max_count_rates) | \
+                   (dark_cube >= linearized) | \
+                   (linearized < 0)
+
+        print("Cleaning image cube")
         self.clean_stack = self.differential_stack.copy()
         self.clean_stack[bad_data] = numpy.NaN
         self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
@@ -447,15 +466,16 @@ class RSS(object):
         self.nonlin_fn = nonlin_fn
         self.nonlinearity_cube = nonlinearity_cube
 
-    def apply_nonlinearity_corrections(self):
+    def apply_nonlinearity_corrections(self, img_cube=None):
 
         if (self.nonlinearity_cube is None):
             print("No nonlinearity corrections loaded, skipping")
             return None
 
-        self.subtract_first_read()
+        # self.subtract_first_read()
+        if (img_cube is None):
+            img_cube = self.image_stack
 
-        img_cube = self.image_stack
         print("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
 
         linearized_cube = \
@@ -510,6 +530,8 @@ if __name__ == "__main__":
                          help="non-linearity correction coefficients (3-d FITS cube)")
     cmdline.add_argument("--flat", dest="flatfield_fn", type=str, default=None,
                          help="calibration flatfield")
+    cmdline.add_argument("--dark", dest="dark_fn", type=str, default=None,
+                         help="calibration dark")
     # cmdline.add_argument("healpix32", nargs="+", type=int,
     #                      help="list of input filenames")
     # cmdline.add_argument("--rerun", type=int, default=6,
@@ -526,7 +548,8 @@ if __name__ == "__main__":
         rss = RSS(fn, max_number_files=args.max_number_files)
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
-        rss.reduce(write_dumps=args.write_dumps)
+        rss.reduce(write_dumps=args.write_dumps,
+                   dark_fn=args.dark_fn)
         rss.write_results()
 
         rss.plot_pixel_curve(818,1033)
