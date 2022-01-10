@@ -497,7 +497,7 @@ class RSS(object):
         hdulist.writeto(fn, overwrite=True)
         return
 
-    def plot_pixel_curve(self, x, y):
+    def plot_pixel_curve(self, x, y, filebase=None):
 
         self.subtract_first_read()
         counts = self.image_stack[:, y-1, x-1]
@@ -517,7 +517,11 @@ class RSS(object):
 
         ax.axhline(y=63000, linestyle=":", color='grey')
 
-        fig.savefig("pixelcurve_x%04d_y%04d.png" % (x,y))
+        plot_fn = "pixelcurve_x%04d_y%04d.png" % (x,y)
+        if (filebase is not None):
+            plot_fn = filebase + plot_fn
+
+        fig.savefig(plot_fn)
 
 
 
