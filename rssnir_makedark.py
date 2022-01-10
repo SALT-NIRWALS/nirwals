@@ -24,6 +24,9 @@ if __name__ == "__main__":
                          help="list of input filenames")
     args = cmdline.parse_args()
 
+    if (args.write_dumps):
+        print("File-dumping enabled!")
+
     for fn in args.files:
 
         rss = rss_reduce.RSS(fn, max_number_files=args.max_number_files)
@@ -48,4 +51,10 @@ if __name__ == "__main__":
             out_fn = args.output_fn
         print("Writing darkrate image to %s ..." % (out_fn))
         dark_hdu.writeto(out_fn, overwrite=True)
+
+
+        rss.plot_pixel_curve(1384, 576, filebase="darkgood__" + rss.filebase+"__")
+        rss.plot_pixel_curve(1419, 605, filebase="darkgood__" + rss.filebase+"__")
+        rss.plot_pixel_curve(1742, 540, filebase="darkbad__" + rss.filebase+"__")
+        rss.plot_pixel_curve(1722, 514, filebase="darkbad__" + rss.filebase+"__")
 
