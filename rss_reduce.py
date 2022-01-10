@@ -142,16 +142,21 @@ class RSS(object):
 
         self.load_all_files()
 
+        # self.subtract_first_read()
+        # apply first-read subtraction
+        self.reset_frame = self.image_stack[0]
+        reset_frame_subtracted = self.image_stack - self.reset_frame
+
         # apply any necessary corrections for nonlinearity and other things
         self.subtract_first_read()
 
         # calculate differential stack
         print("Applying non-linearity corrections")
-        linearized = self.apply_nonlinearity_corrections()
+        linearized = self.apply_nonlinearity_corrections(reset_frame_subtracted)
         # print("linearized = ", linearized)
         if (linearized is None):
             print("No linearized data found, using raw data instead")
-            linearized = self.image_stack
+            linearized = reset_frame_subtracted
         self.linearized_cube = linearized
 
         #self.image_stack
@@ -170,9 +175,10 @@ class RSS(object):
         self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
 
         # calculate a average countrate image
-        image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
+        print("calculating final image from stack")
+        # image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
         self.reduced_image_plain = numpy.nanmean(self.clean_stack, axis=0)
-        noise = numpy.sqrt((self.image_stack + self.first_read))
+        noise = numpy.sqrt(self.image_stack)
         noise[bad_data] = numpy.NaN
         noise[0, :, :] = numpy.NaN
         self.inv_noise = numpy.nansum(1./noise, axis=0)
@@ -182,19 +188,24 @@ class RSS(object):
 
         # ratios = linearized / linearized[3:4, :, :]
 
-        if (write_dumps):
-            pyfits.PrimaryHDU(data=self.image_stack+self.first_read).writeto("stack_raw.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.image_stack).writeto("stack_zerosub.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=linearized).writeto("stack_linearized.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.differential_stack).writeto("stack_diff.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.clean_stack).writeto("stack_clean.fits", overwrite=True)
+        if (write_dumps or True):
+            print("Writing all dumps")
+            bn = self.filebase + "__"
+            print("Dump-file basename: ", bn)
+            pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_raw.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_zerosub.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=linearized).writeto(bn+"stack_linearized.fits", overwrite=True)
+            print("writing darkcube")
+            pyfits.PrimaryHDU(data=dark_cube).writeto(bn+"stack_darkcube.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.differential_stack).writeto(bn+"stack_diff.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.clean_stack).writeto(bn+"stack_clean.fits", overwrite=True)
             # pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.reduced_image_plain).writeto("final_image.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=image7).writeto("final_image7.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=max_count_rates).writeto("max_count_rates.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=bad_data.astype(numpy.int)).writeto("bad_data.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.weighted_mean).writeto("final_image_weighted.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.inv_noise).writeto("final_inv_noise.fits", overwrite=True)
+            # pyfits.PrimaryHDU(data=self.reduced_image_plain).writeto("final_image.fits", overwrite=True)
+            # pyfits.PrimaryHDU(data=image7).writeto("final_image7.fits", overwrite=True)
+            # pyfits.PrimaryHDU(data=max_count_rates).writeto("max_count_rates.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=bad_data.astype(numpy.int)).writeto(bn+"bad_data.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.weighted_mean).writeto(bn+"final_image_weighted.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.inv_noise).writeto(bn+"final_inv_noise.fits", overwrite=True)
 
         return
 
