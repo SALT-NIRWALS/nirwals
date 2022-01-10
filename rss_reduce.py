@@ -100,6 +100,13 @@ class RSS(object):
     def add_file(self, filename):
         return
 
+    def store_header_info(self, hdr):
+        self.first_header = hdr
+
+        self.exptime = hdr['USEREXP'] / 1000.
+        self.n_groups = hdr['NGROUPS']
+        self.diff_exptime = self.exptime / self.n_groups
+
     def load_all_files(self, max_number_files=None):
 
         if (max_number_files is None):
@@ -121,7 +128,8 @@ class RSS(object):
             imgdata = hdulist[0].data
             self._image_stack.append(imgdata)
             if  (self.first_header is None):
-                self.first_header = hdulist[0].header
+                self.store_header_info(hdulist[0].header)
+
             # break
 
         # calculate the initial image stack
