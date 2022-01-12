@@ -50,8 +50,17 @@ print(astropy.__path__)
 #     return pfit, uncert
 #
 
+darktype_GOOD = 0
+darktype_COLD = 1
+darktype_WARM = 2
+darktype_HOT = 3
 
 class RSS(object):
+
+    mask_SATURATED = 0x0001
+    mask_LOW_RATE = 0x0002
+    mask_BAD_DARK = 0x0004
+    mask_NEGATIVE = 0x0008
 
     def __init__(self, fn, max_number_files=-1,
                  saturation_level=60000,
@@ -138,7 +147,7 @@ class RSS(object):
 
         self.image_stack_initialized = True
 
-    def reduce(self, dark_fn=None, write_dumps=False):
+    def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None):
 
         self.load_all_files()
 
@@ -157,9 +166,14 @@ class RSS(object):
         self.linearized_cube = linearized
 
         dark_cube = numpy.zeros_like(linearized)
-        if (dark_fn is not None and os.path.isfile(dark_fn)):
+        if (dark_fn is None):
+            print("No dark correction requested, skipping")
+        elif (not os.path.isfile(dark_fn)):
+            print("Dark requested (%s) but not found" % (dark_fn))
+        else:
             try:
                 # load dark-rate image
+                print("Loading dark-corrections from %s" % (dark_fn))
                 dark_hdu = pyfits.open(dark_fn)
                 dark = dark_hdu['DARKRATE'].data
 
@@ -183,10 +197,22 @@ class RSS(object):
 
         # TODO: implement full iterative outlier rejection here
         print("Identifying bad pixels")
-        bad_data = (self.image_stack > self.saturation_level) | \
-                   (self.differential_stack < self.saturation_fraction*max_count_rates) | \
-                   (dark_cube >= linearized) | \
-                   (linearized < 0)
+        bad_data = numpy.zeros_like(self.image_stack, dtype=numpy.bool)
+        if (mask_bad_data is not None and (mask_bad_data & self.mask_SATURATED) > 0):
+            bad_data = bad_data | (self.image_stack > self.saturation_level)
+        if (mask_bad_data is not None and (mask_bad_data & self.mask_LOW_RATE) > 0):
+            bad_data = bad_data | (self.differential_stack < self.saturation_fraction*max_count_rates)
+        if (mask_bad_data is not None and (mask_bad_data & self.mask_BAD_DARK) > 0):
+            bad_data = bad_data | (dark_cube >= linearized)
+        if (mask_bad_data is not None and (mask_bad_data & self.mask_NEGATIVE) > 0):
+            bad_data = bad_data | (linearized < 0)
+
+        self.bad_data_mask = bad_data
+
+        # bad_data = (self.image_stack > self.saturation_level) | \
+        #            (self.differential_stack < self.saturation_fraction*max_count_rates) | \
+        #            (dark_cube >= linearized) | \
+        #            (linearized < 0)
 
         print("Cleaning image cube")
         self.clean_stack = self.differential_stack.copy()
@@ -499,9 +525,9 @@ class RSS(object):
 
     def plot_pixel_curve(self, x, y, filebase=None):
 
-        self.subtract_first_read()
+        # self.subtract_first_read()
         counts = self.image_stack[:, y-1, x-1]
-        zerolevel = self.first_read[y-1,x-1]
+        zerolevel = self.image_stack[0, y-1,x-1]
         frame_number = numpy.arange(counts.shape[0])
         if (hasattr(self, "linearized_cube")):
             linearized_counts = self.linearized_cube[:, y - 1, x - 1]
@@ -510,8 +536,8 @@ class RSS(object):
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        ax.scatter(frame_number, counts+zerolevel, s=4, label='raw')
-        ax.scatter(frame_number, counts, s=4, label='raw, zerosub')
+        ax.scatter(frame_number, counts, s=4, label='raw')
+        ax.scatter(frame_number, counts-zerolevel, s=4, label='raw, zerosub')
         ax.scatter(frame_number, linearized_counts, s=4, label='linearized, zerosub')
         ax.scatter(frame_number, linearized_counts+zerolevel, s=4, label='linearized')
 
@@ -536,6 +562,8 @@ if __name__ == "__main__":
                          help="calibration flatfield")
     cmdline.add_argument("--dark", dest="dark_fn", type=str, default=None,
                          help="calibration dark")
+    cmdline.add_argument("--output", dest="output_postfix", type=str, default="reduced",
+                         help="addition to output filename")
     # cmdline.add_argument("healpix32", nargs="+", type=int,
     #                      help="list of input filenames")
     # cmdline.add_argument("--rerun", type=int, default=6,
@@ -554,7 +582,7 @@ if __name__ == "__main__":
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
                    dark_fn=args.dark_fn)
-        rss.write_results()
+        rss.write_results(fn="%s.%s.fits" % (rss.filebase, args.output_postfix))
 
         rss.plot_pixel_curve(818,1033)
         rss.plot_pixel_curve(1700,555)
