@@ -549,6 +549,32 @@ class RSS(object):
 
         fig.savefig(plot_fn)
 
+    def dump_pixeldata(self, x, y, filebase=None, extras=None):
+
+        print("dumping pixeldata for pixel @ %d / %d" % (x,y))
+
+        _x = x-1
+        _y = y-1
+        frame_number = numpy.arange(self.image_stack.shape[0])
+        raw_series = self.image_stack[:, _y, _x]
+        linearized = self.linearized_cube[:, _y, _x]
+
+        fn = "pixeldump_x%04d_y%04d.complete" % (x,y)
+        if (filebase is not None):
+            fn = filebase + fn
+
+        extra_pixels = []
+        if (extras is not None):
+            try:
+                for ex in extras:
+                    extra_pixels.append(ex[:, _y, _x])
+            except:
+                pass
+
+        numpy.savetxt(fn, numpy.array([
+            frame_number, raw_series, linearized
+            ]+extra_pixels).T
+        )
 
 
 if __name__ == "__main__":
