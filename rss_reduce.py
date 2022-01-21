@@ -523,7 +523,10 @@ class RSS(object):
         hdulist.writeto(fn, overwrite=True)
         return
 
-    def plot_pixel_curve(self, x, y, filebase=None):
+    def plot_pixel_curve(self, x, y, filebase=None,
+                         cumulative=True, differential=False,
+                         diff_vs_cum=False,
+                         show_fits=False, show_errors=False):
 
         # self.subtract_first_read()
         counts = self.image_stack[:, y-1, x-1]
@@ -533,21 +536,70 @@ class RSS(object):
             linearized_counts = self.linearized_cube[:, y - 1, x - 1]
         else:
             linearized_counts = counts
+        phot_error = numpy.sqrt(counts - zerolevel)
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.scatter(frame_number, counts, s=4, label='raw')
-        ax.scatter(frame_number, counts-zerolevel, s=4, label='raw, zerosub')
-        ax.scatter(frame_number, linearized_counts, s=4, label='linearized, zerosub')
-        ax.scatter(frame_number, linearized_counts+zerolevel, s=4, label='linearized')
+        if (cumulative):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.scatter(frame_number, counts, s=4, label='raw')
+            ax.scatter(frame_number, counts - zerolevel, s=4, label='raw, zerosub')
+            ax.scatter(frame_number, linearized_counts, s=4, label='linearized, zerosub')
+            ax.scatter(frame_number, linearized_counts + zerolevel, s=4, label='linearized')
 
-        ax.axhline(y=63000, linestyle=":", color='grey')
+            if (show_errors):
+                ax.errorbar(frame_number, linearized_counts, yerr=phot_error)
 
-        plot_fn = "pixelcurve_x%04d_y%04d.png" % (x,y)
-        if (filebase is not None):
-            plot_fn = filebase + plot_fn
+            ax.axhline(y=63000, linestyle=":", color='grey')
 
-        fig.savefig(plot_fn)
+            plot_fn = "cumpixelcurve_x%04d_y%04d.png" % (x, y)
+            if (filebase is not None):
+                plot_fn = filebase + plot_fn
+            fig.savefig(plot_fn)
+            plt.close(fig)
+
+        if (differential):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+
+            diff = numpy.pad(numpy.diff(counts), (1,0), mode='constant', constant_values=0)
+
+            ax.scatter(frame_number, diff, s=4, label='raw')
+            #ax.scatter(frame_number, counts - zerolevel, s=4, label='raw, zerosub')
+            #ax.scatter(frame_number, linearized_counts, s=4, label='linearized, zerosub')
+            #ax.scatter(frame_number, linearized_counts + zerolevel, s=4, label='linearized')
+            if (show_errors):
+                ax.errorbar(frame_number, diff, yerr=phot_error)
+
+            ax.axhline(y=0, linestyle=":", color='grey')
+
+            plot_fn = "diffpixelcurve_x%04d_y%04d.png" % (x, y)
+            if (filebase is not None):
+                plot_fn = filebase + plot_fn
+            fig.savefig(plot_fn)
+            plt.close(fig)
+
+        if (diff_vs_cum):
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+
+            diff = numpy.pad(numpy.diff(counts), (1,0), mode='constant', constant_values=0)
+
+            ax.scatter(counts, diff, s=4, label='raw')
+            #ax.scatter(frame_number, counts - zerolevel, s=4, label='raw, zerosub')
+            #ax.scatter(frame_number, linearized_counts, s=4, label='linearized, zerosub')
+            #ax.scatter(frame_number, linearized_counts + zerolevel, s=4, label='linearized')
+
+            if (show_errors):
+                ax.errorbar(counts, diff, xerr=phot_error, yerr=phot_error)
+
+            ax.axhline(y=0, linestyle=":", color='grey')
+            ax.axvline(x=63000, linestyle=":", color='grey')
+            plot_fn = "_diff_vs_cum__pixelcurve_x%04d_y%04d.png" % (x, y)
+            if (filebase is not None):
+                plot_fn = filebase + plot_fn
+            fig.savefig(plot_fn)
+            plt.close(fig)
+
 
     def dump_pixeldata(self, x, y, filebase=None, extras=None):
 
