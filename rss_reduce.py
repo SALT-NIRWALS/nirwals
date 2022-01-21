@@ -233,7 +233,7 @@ class RSS(object):
 
         # ratios = linearized / linearized[3:4, :, :]
 
-        if (write_dumps or True):
+        if (write_dumps):
             print("Writing all dumps")
             bn = self.filebase + "__"
             print("Dump-file basename: ", bn)
