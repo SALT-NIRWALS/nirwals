@@ -551,7 +551,9 @@ class RSS(object):
 
             ax.axhline(y=63000, linestyle=":", color='grey')
 
-            plot_fn = "cumpixelcurve_x%04d_y%04d.png" % (x, y)
+            fig.suptitle("%s :: x=%d y=%d" % (self.filebase,x,y))
+
+            plot_fn = "_pixelcurve_x%04d_y%04d____cum_vs_read.png" % (x, y)
             if (filebase is not None):
                 plot_fn = filebase + plot_fn
             fig.savefig(plot_fn)
@@ -572,7 +574,9 @@ class RSS(object):
 
             ax.axhline(y=0, linestyle=":", color='grey')
 
-            plot_fn = "diffpixelcurve_x%04d_y%04d.png" % (x, y)
+            fig.suptitle("%s :: x=%d y=%d" % (self.filebase,x,y))
+
+            plot_fn = "_pixelcurve_x%04d_y%04d____diff_vs_read.png" % (x, y)
             if (filebase is not None):
                 plot_fn = filebase + plot_fn
             fig.savefig(plot_fn)
@@ -592,9 +596,11 @@ class RSS(object):
             if (show_errors):
                 ax.errorbar(counts, diff, xerr=phot_error, yerr=phot_error)
 
+            fig.suptitle("%s :: x=%d y=%d" % (self.filebase,x,y))
+
             ax.axhline(y=0, linestyle=":", color='grey')
             ax.axvline(x=63000, linestyle=":", color='grey')
-            plot_fn = "_diff_vs_cum__pixelcurve_x%04d_y%04d.png" % (x, y)
+            plot_fn = "_pixelcurve_x%04d_y%04d____diff_vs_cum.png" % (x, y)
             if (filebase is not None):
                 plot_fn = filebase + plot_fn
             fig.savefig(plot_fn)
