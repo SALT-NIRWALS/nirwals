@@ -14,6 +14,9 @@ import argparse
 from astropy import log
 log.setLevel('ERROR')
 
+import warnings
+warnings.filterwarnings('ignore')
+
 import astropy
 print(astropy.__path__)
 
@@ -49,6 +52,21 @@ print(astropy.__path__)
 #     print(pfit, uncert)
 #     return pfit, uncert
 #
+
+#
+# Helper function for signal fitting
+#
+def _persistency_plus_signal_fit_fct(p, x):
+    # y = numpy.zeros(x.shape)
+    # for i in range(p.shape[0]):
+    #     y += p[i] * x ** (i + 1)
+    y = p[0] * x + p[1] * (1. - numpy.exp(-x / 9)) #p[2]))
+    return y
+def _persistency_plus_signal_fit_err_fct(p, x, y):
+    yfit = _persistency_plus_signal_fit_fct(p, x)
+    err = numpy.sqrt(y + 10 ** 2)
+    return ((y - yfit) / err)
+
 
 darktype_GOOD = 0
 darktype_COLD = 1
@@ -526,7 +544,8 @@ class RSS(object):
     def plot_pixel_curve(self, x, y, filebase=None,
                          cumulative=True, differential=False,
                          diff_vs_cum=False,
-                         show_fits=False, show_errors=False):
+                         show_fits=False, show_errors=False,
+                         show_plot=False):
 
         # self.subtract_first_read()
         counts = self.image_stack[:, y-1, x-1]
@@ -550,6 +569,7 @@ class RSS(object):
                 ax.errorbar(frame_number, linearized_counts, yerr=phot_error)
 
             ax.axhline(y=63000, linestyle=":", color='grey')
+            ax.legend()
 
             fig.suptitle("%s :: x=%d y=%d" % (self.filebase,x,y))
 
@@ -557,7 +577,11 @@ class RSS(object):
             if (filebase is not None):
                 plot_fn = filebase + plot_fn
             fig.savefig(plot_fn)
-            plt.close(fig)
+
+            if (show_plot):
+                fig.show()
+            else:
+                plt.close(fig)
 
         if (differential):
             fig = plt.figure()
@@ -573,6 +597,7 @@ class RSS(object):
                 ax.errorbar(frame_number, diff, yerr=phot_error)
 
             ax.axhline(y=0, linestyle=":", color='grey')
+            ax.legend()
 
             fig.suptitle("%s :: x=%d y=%d" % (self.filebase,x,y))
 
@@ -580,7 +605,12 @@ class RSS(object):
             if (filebase is not None):
                 plot_fn = filebase + plot_fn
             fig.savefig(plot_fn)
-            plt.close(fig)
+
+            if (show_plot):
+                fig.show()
+            else:
+                plt.close(fig)
+            # plt.close(fig)
 
         if (diff_vs_cum):
             fig = plt.figure()
@@ -597,6 +627,7 @@ class RSS(object):
                 ax.errorbar(counts, diff, xerr=phot_error, yerr=phot_error)
 
             fig.suptitle("%s :: x=%d y=%d" % (self.filebase,x,y))
+            ax.legend()
 
             ax.axhline(y=0, linestyle=":", color='grey')
             ax.axvline(x=63000, linestyle=":", color='grey')
@@ -604,7 +635,12 @@ class RSS(object):
             if (filebase is not None):
                 plot_fn = filebase + plot_fn
             fig.savefig(plot_fn)
-            plt.close(fig)
+
+            if (show_plot):
+                fig.show()
+            else:
+                plt.close(fig)
+            # plt.close(fig)
 
 
     def dump_pixeldata(self, x, y, filebase=None, extras=None):
@@ -633,6 +669,141 @@ class RSS(object):
             frame_number, raw_series, linearized
             ]+extra_pixels).T
         )
+
+
+    def _parallel_worker(self, job_queue, result_queue, execute_function, is_in_class=True):
+        print("Worker has started")
+        while (True):
+            job = job_queue.get()
+            if (job is None):
+                job_queue.task_done()
+                print("Worker shutting down")
+                break
+
+            [x, y] = job
+            if ((y % 10) == 0 and x == 0): print(job)
+
+            if (is_in_class):
+                result = execute_function(x, y)
+            else:
+                result = execute_function(self, x, y)
+
+            result_queue.put((x, y, result))
+
+            job_queue.task_done()
+
+
+    def parallel_fitter(self, xrange=None, yrange=None,
+                        execute_function=None, return_dim=1, is_in_class=True,
+                        n_workers=None):
+
+        if (xrange is None):
+            x1 = 0
+            x2 = self.image_stack.shape[2]
+        else:
+            [x1,x2] = xrange
+
+        if (yrange is None):
+            y1 = 0
+            y2 = self.image_stack.shape[1]
+        else:
+            [y1,y2] = yrange
+
+        # prepare return results
+        return_results = numpy.full((return_dim, y2-y1, x2-x1), fill_value=numpy.NaN)
+
+        # generate the coordinates where we need to fit/process data
+        # iy, ix = numpy.indices((rss.image_stack.shape[1], rss.image_stack.shape[2]))
+        iy, ix = numpy.indices((y2-y1, x2-x1))
+        iy += y1
+        ix += x1
+        print(iy.shape)
+
+        # prepare work and results queue for data exchange with the workers
+        job_queue = multiprocessing.JoinableQueue()
+        result_queue = multiprocessing.Queue()
+        ixy = numpy.dstack([ix, iy]).reshape((-1, 2))
+        print(ixy.shape)
+        print(ixy[:10])
+
+        # prepare and start the workers
+        print("Creating workers")
+        worker_processes = []
+        if (n_workers is None):
+            n_workers = multiprocessing.cpu_count()
+        for n in range(n_workers):
+            p = multiprocessing.Process(
+                target=self._parallel_worker,
+                kwargs=dict(#self=self,
+                            job_queue=job_queue,
+                            result_queue=result_queue,
+                            execute_function=execute_function,
+                            is_in_class=is_in_class
+                            )
+            )
+            p.daemon = True
+            p.start()
+            worker_processes.append(p)
+
+        # prepare jobqueue
+        print("preparing jobs")
+        n_jobs = 0
+        for _xy in ixy:
+            job_queue.put(_xy)
+            n_jobs += 1
+
+        # add termination signals to the work-queue so workers know when to shut down
+        for p in worker_processes:
+            job_queue.put(None)
+
+        # wait for completion
+        print("Waiting for completion")
+        job_queue.join()
+
+        # receive all the results back from the workers
+        for j in range(n_jobs):
+            result = result_queue.get()
+            (x,y,value) = result
+            return_results[:, y-y1,x-x1] = value
+
+        return return_results
+
+
+
+    def fit_2component_persistency_plus_signal(self, x, y):
+
+        _x = x-1
+        _y = y-1
+
+        raw_data = self.image_stack[:, _y, _x]
+        bad_data = raw_data > self.saturation_level
+        # bad_data = self.bad_data_mask[:, _y, _x]
+        if (hasattr(self, 'linearized_cube')):
+            series = self.linearized_cube[:, _y, _x]
+        else:
+            series = self.image_stack[:,_y,_x]
+
+        if (numpy.sum(~bad_data) < 5):
+            return [numpy.NaN, numpy.NaN, numpy.NaN]
+
+        pinit = [1., 0.] #, 1.]
+
+        readout_times = numpy.arange(series.shape[0], dtype=numpy.float) * self.diff_exptime
+        img_time = readout_times[~bad_data]
+        img_flux = series[~bad_data]
+
+        fit = scipy.optimize.leastsq(
+            func=_persistency_plus_signal_fit_err_fct, x0=pinit,
+            args=(img_time, img_flux),
+            full_output=1
+        )
+        # print(fit)
+        pfit = fit[0]
+
+        # bestfit = _fit_persistency_plus_signal_pixel(
+        #     integ_exp_time[~bad_data], series[~bad_data])
+
+        return pfit #self.image_stack[1, y-1, x-1]
 
 
 if __name__ == "__main__":
