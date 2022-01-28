@@ -9,6 +9,7 @@ import astropy.io.fits as pyfits
 
 import rss_reduce
 
+from dev__fitpersistencysignal import _fit_persistency_plus_signal_pixel
 
 if __name__ == "__main__":
 
@@ -86,8 +87,20 @@ if __name__ == "__main__":
         warm_ixy = ixy[warm_pixels]
         print("warm_ixy:", warm_ixy.shape)
 
-        warm_coefficients = numpy.zeros((3, darkrate.shape[1], darkrate.shape[2]))
+        warm_coefficients = numpy.zeros((3, darkrate.shape[0], darkrate.shape[1]))
+        for i, _xy in enumerate(warm_ixy):
+            x, y = _xy[0], _xy[1]
+            fullseries = rss.linearized_cube[:, y, x]
+            bad = rss.bad_data_mask[:, y, x]
 
+            series = fullseries[~bad]
+            times = integ_exp_time[~bad]
+            bestfit = _fit_persistency_plus_signal_pixel(times, series)
+
+            warm_coefficients[:, y,x] = bestfit
+            if ((i%1000) == 0):
+                sys.stdout.write(">")
+                sys.stdout.flush()
 
         # now that we have the dark-rate, apply the correction to the frame to estimate the noise
         mean_rate_subtracted = rss.linearized_cube - integ_exp_time.reshape((-1,1,1)) * darkrate.reshape((1, darkrate.shape[0], darkrate.shape[1]))
@@ -97,6 +110,7 @@ if __name__ == "__main__":
             pyfits.PrimaryHDU(header=rss.first_header),
             pyfits.ImageHDU(data=darkrate, name='DARKRATE'),
             pyfits.ImageHDU(data=number_good_dark_samples, name='N_SAMPLES'),
+            pyfits.ImageHDU(data=warm_coefficients, name='WARM_DARK_COEFFS'),
         ])
 
         if args.output_fn is None:
