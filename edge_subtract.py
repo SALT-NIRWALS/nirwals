@@ -12,9 +12,11 @@ if __name__ == "__main__":
     hdulist = pyfits.open(fn)
     data = hdulist[0].data
 
+    edge = 1
+
     iy,ix = numpy.indices(data.shape, dtype=numpy.float)
-    _top = numpy.mean(data[:4, :], axis=0).reshape((1,-1))
-    _bottom = numpy.mean(data[-4:, :], axis=0).reshape((1,-1))
+    _top = numpy.mean(data[edge:4, :], axis=0).reshape((1,-1))
+    _bottom = numpy.mean(data[-4:-edge, :], axis=0).reshape((1,-1))
     print(_top.shape)
 
     fy = (iy-4)/2040.
@@ -22,8 +24,8 @@ if __name__ == "__main__":
     y_pattern = _bottom + (fy * (_top-_bottom))
 
     y_sub = data - y_pattern
-    _left = numpy.mean(y_sub[:, :4], axis=1).reshape((-1,1))
-    _right = numpy.mean(y_sub[:, -4:], axis=1).reshape((-1,1))
+    _left = numpy.mean(y_sub[:, edge:4], axis=1).reshape((-1,1))
+    _right = numpy.mean(y_sub[:, -4:-edge], axis=1).reshape((-1,1))
     print(_left.shape)
     x_pattern = _left + fx * (_right-_left)
 
