@@ -66,8 +66,8 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
         print("amp background:", amp_background.shape)
 
     ref_background = numpy.median(ref_columns, axis=0)
-    print("REF BG:", ref_background.shape)
     if (debug):
+        print("REF BG:", ref_background.shape)
         numpy.savetxt("ref_cols.txt", ref_background)
         numpy.savetxt("amp_background.txt", amp_background.T)
         numpy.savetxt("ref_columns.txt", ref_columns.T)
