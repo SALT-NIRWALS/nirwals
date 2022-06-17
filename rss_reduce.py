@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 import multiprocessing
 import os
 import sys
@@ -19,6 +20,9 @@ warnings.filterwarnings('ignore')
 
 import astropy
 print(astropy.__path__)
+
+
+import rss_refpixel_calibrate
 
 # def fit_nonlinearity_sequence(pinit, args):
 #     """
@@ -82,10 +86,15 @@ class RSS(object):
 
     def __init__(self, fn, max_number_files=-1,
                  saturation_level=60000,
-                 saturation_fraction=0.25, saturation_percentile=95):
+                 saturation_fraction=0.25, saturation_percentile=95,
+                 use_reference_pixels=True):
+
         self.fn = fn
         self.filelist = []
 
+        self.logger = logging.getLogger("RSS")
+
+        self.use_reference_pixels = use_reference_pixels
         self.image_stack_initialized = False
         self.first_read_subtracted = False
         self.first_read = None
@@ -110,7 +119,7 @@ class RSS(object):
         self.filebase = ".".join(_fn.split(".")[:-2])
         # print(self.basedir, filebase)
 
-        for _read in range(1,100):
+        for _read in range(1,1000):
             filename = "%s.%d.fits" % (self.filebase, _read)
             full_filename = os.path.join(self.basedir, filename)
             if (os.path.isfile(full_filename)):
@@ -169,10 +178,20 @@ class RSS(object):
 
         self.load_all_files()
 
-        # self.subtract_first_read()
-        # apply first-read subtraction
-        self.reset_frame = self.image_stack[0]
-        reset_frame_subtracted = self.image_stack - self.reset_frame
+        if (self.use_reference_pixels):
+            self.logger.info("Applying reference pixel corrections")
+            reset_frame_subtracted = self.image_stack.copy()
+            for frame_id in range(self.image_stack.shape[0]):
+                reference_pixel_correction = rss_refpixel_calibrate.reference_pixels_to_background_correction(
+                    self.image_stack[frame_id]
+                )
+                reset_frame_subtracted[frame_id] -= reference_pixel_correction
+        else:
+            self.logger.info("Subtracting first read from stack")
+            # self.subtract_first_read()
+            # apply first-read subtraction
+            self.reset_frame = self.image_stack[0]
+            reset_frame_subtracted = self.image_stack - self.reset_frame
 
         # apply any necessary corrections for nonlinearity and other things
         print("Applying non-linearity corrections")
@@ -825,6 +844,8 @@ if __name__ == "__main__":
     #                      help="rerun")
     cmdline.add_argument("--dumps", dest="write_dumps", default=False, action='store_true',
                          help="write intermediate process data [default: NO]")
+    cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
+                         help="use reference pixels [default: NO]")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
