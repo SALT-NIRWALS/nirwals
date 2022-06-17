@@ -35,7 +35,37 @@
   **--dumps** Mostly used for debugging. When provided the tool also writes a number
   of intermediate data products to disk that allow testing and verification.
     
+### Example call:
 
+```/work/rss/rss_reduce.py  --refpixel --maxfiles=70 SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.20.fits```
+
+output:
+
+```
+rkotulla@legion:/work/rss/salt> ../rss_reduce/rss_reduce.py --refpixel --maxfiles=70 SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.20.fits
+/work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.20.fits
+/work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.1.fits
+ -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.2.fits
+ -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.3.fits
+ -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.4.fits
+...
+ -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.247.fits
+ -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.248.fits
+ -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.249.fits
+ -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.250.fits
+Limiting filelist to 70 frames
+(70, 2048, 2048)
+Applying non-linearity corrections
+No nonlinearity corrections loaded, skipping
+No linearized data found, using raw data instead
+No dark correction requested, skipping
+diff stack: (70, 2048, 2048)
+Identifying bad pixels
+Cleaning image cube
+calculating final image from stack
+Writing reduced results to 20220606_RN_URG_2reads_9dB.540.1.reduced.fits
+all done!
+```
 
 ## Caveats and limitations
 
