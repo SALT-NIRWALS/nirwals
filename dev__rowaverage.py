@@ -15,7 +15,7 @@ if __name__ == "__main__":
     rss = rss_reduce.RSS(fn=fn)
     rss.load_all_files()
 
-amp1s = []
+    amp1s = []
     lefts = []
     mains = []
     rights = []
