@@ -35,3 +35,13 @@
   **--dumps** Mostly used for debugging. When provided the tool also writes a number
   of intermediate data products to disk that allow testing and verification.
     
+
+
+## Caveats and limitations
+
+- Not yet supported are fowler-reads of any kind, in particular when combined with 
+  up the ramp sampling.
+- Watch out when running on large numbers of up-the-ramp samples to avoid running out
+  of memory (RAM). At this time the tool is optimized towards computing time at the 
+  expense of memory demand. If in doubt or to begin use the _--maxfiles_ option to limit the number
+  the number of open files and thus the memory footprint.
