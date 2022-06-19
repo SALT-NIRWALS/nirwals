@@ -42,7 +42,8 @@
 output:
 
 ```
-rkotulla@legion:/work/rss/salt> ../rss_reduce/rss_reduce.py --refpixel --maxfiles=70 SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.20.fits
+rkotulla@legion:/work/rss/salt> ../rss_reduce/rss_reduce.py --refpixel \
+    --maxfiles=70 SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.20.fits
 /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.20.fits
 /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.1.fits
  -- /work/rss/salt/SALT_data_RN_20220606/20220606_RN_URG_2reads_9dB.540.1.2.fits
