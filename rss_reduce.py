@@ -109,7 +109,33 @@ class RSS(object):
         self.saturation_fraction = saturation_fraction
         self.saturation_percentile = saturation_percentile
 
+        self.read_exposure_setup()
+
         self.get_full_filelist()
+
+    def read_exposure_setup(self):
+        if (self.fn is None):
+            self.logger.critical("Unable to get exposure setup without valid input filename")
+
+        # read the input file as reference file
+        self.ref_hdulist = pyfits.open(self.fn)
+        self.ref_header = self.ref_hdulist[0].header
+
+        # image dimensions
+        self.nx = self.ref_header['XSTOP'] - self.ref_header['XSTART'] + 1
+        self.ny = self.ref_header['YSTOP'] - self.ref_header['YSTART'] + 1
+
+        # readout settings
+        self.n_groups = self.ref_header['NGROUPS']
+        self.n_ramps = self.ref_header['NRAMPS']
+        self.n_reads = self.ref_header['NREADS']
+        self.n_outputs = self.ref_header['NOUTPUTS']
+        self.gain = self.ref_header['GAIN']
+
+        # exposure and other times
+        self.exptime = self.ref_header['USEREXP'] / 1000.
+        self.diff_exptime = self.exptime / self.n_groups
+
 
     def get_full_filelist(self):
         # get basedir
@@ -136,12 +162,12 @@ class RSS(object):
     def add_file(self, filename):
         return
 
-    def store_header_info(self, hdr):
-        self.first_header = hdr
-
-        self.exptime = hdr['USEREXP'] / 1000.
-        self.n_groups = hdr['NGROUPS']
-        self.diff_exptime = self.exptime / self.n_groups
+    # def store_header_info(self, hdr):
+    #     self.first_header = hdr
+    #
+    #     self.exptime = hdr['USEREXP'] / 1000.
+    #     self.n_groups = hdr['NGROUPS']
+    #     self.diff_exptime = self.exptime / self.n_groups
 
     def load_all_files(self, max_number_files=None):
 
@@ -155,22 +181,60 @@ class RSS(object):
 
         # open all frames
         _filelist = self.filelist
-        if (max_number_files > 0):
-            print("Limiting filelist to %d frames" % (max_number_files))
-            _filelist = _filelist[:max_number_files]
+        # if (max_number_files > 0):
+        #     print("Limiting filelist to %d files" % (max_number_files))
+        #     _filelist = _filelist[:max_number_files]
+
+        # setup the data-cube to hold all the data
+        if (max_number_files is not None and self.n_groups > max_number_files):
+            self.n_groups = max_number_files
+            print("Limiting input data to %d read-groups" % (max_number_files))
+
+        self.image_stack_raw = numpy.full(
+            (self.n_reads, self.n_groups, self.ny, self.nx),
+            fill_value=numpy.NaN, dtype=numpy.float32)
+        self.raw_read_times = numpy.full((self.n_reads, self.n_groups), fill_value=numpy.NaN)
+
+        print("raw image cube dimensions:", self.image_stack_raw.shape)
+
+        # TODO: Add proper handling for combined Fowler and up-the-ramp sampling
         for fn in _filelist:
             hdulist = pyfits.open(fn)
-            # hdulist.info()
+            hdr = hdulist[0].header
             imgdata = hdulist[0].data
-            self._image_stack.append(imgdata)
-            if  (self.first_header is None):
-                self.store_header_info(hdulist[0].header)
+            # hdulist.info()
+
+            img_group = hdr['GROUP']
+            img_read = hdr['READ']
+            img_exptime = hdr['ACTEXP'] / 1000000. # convert time from raw microseconds to seconds
+
+            if (img_group >= max_number_files):
+                continue
+
+            self.raw_read_times[img_read-1, img_group-1] = img_exptime
+            self.image_stack_raw[img_read-1, img_group-1, :, :] = imgdata
+
+
+
+            # self._image_stack.append(imgdata)
+            # if  (self.first_header is None):
+            #     self.store_header_info(hdulist[0].header)
 
             # break
 
         # calculate the initial image stack
-        self.image_stack = numpy.array(self._image_stack, dtype=numpy.float32)
+#         self.image_stack = numpy.array(self._image_stack, dtype=numpy.float32)
+        self.image_stack = numpy.nanmean(self.image_stack_raw, axis=0)
+
+        print("stack before/after:", self.image_stack_raw.shape, self.image_stack.shape)
+
+        self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
+        print(self.read_times)
+
         print(self.image_stack.shape)
+
+        # delete raw stack to clean up memory
+        del self.image_stack_raw
 
         self.image_stack_initialized = True
 
