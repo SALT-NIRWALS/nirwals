@@ -23,6 +23,9 @@ import multiprocessing
 
 import rss_reduce
 
+
+
+
 def ds9_listener(ds9, return_queue):
 
     while(True):
@@ -53,6 +56,23 @@ def ds9_listener(ds9, return_queue):
         return_queue.put((command, ix, iy))
 
 
+# adopting solution asked in
+# https://stackoverflow.com/questions/61397176/
+# .. how-to-keep-matplotlib-from-stealing-focus
+# and taken from here:
+# https://stackoverflow.com/questions/45729092/
+# .. make-interactive-matplotlib-window-not-pop-to-front-on-each-update-windows-7/45734500#45734500
+def mypause(interval):
+    backend = plt.rcParams['backend']
+    if backend in matplotlib.rcsetup.interactive_bk:
+        figManager = matplotlib._pylab_helpers.Gcf.get_active()
+        if figManager is not None:
+            canvas = figManager.canvas
+            if canvas.figure.stale:
+                canvas.draw()
+            canvas.start_event_loop(interval)
+            return
+
 def rss_plotter(rss, ds9_queue):
 
     print("Plotter thread running")
@@ -60,7 +80,7 @@ def rss_plotter(rss, ds9_queue):
     plt.ion()
     fig = plt.figure()
     fig.show()
-    plt.show()
+    plt.show(block=False)
 
     ax = fig.add_subplot(111)
     plt.pause(0.01)
@@ -90,6 +110,7 @@ def rss_plotter(rss, ds9_queue):
 
         ax.cla()
         ax = fig.add_subplot(111)
+        fig.suptitle("Pixel position: x=%d // y=%d" % (ix+1, iy+1))
 
         if (command == "w"):
 
@@ -138,7 +159,8 @@ def rss_plotter(rss, ds9_queue):
 
         # fig.show()
         # plt.show()
-        plt.pause(0.05)
+        # plt.pause(0.05)
+        mypause(0.05)
         # fig.canvas.draw_idle()
         # time.sleep(0.1)
 
