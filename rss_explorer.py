@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import matplotlib
+print(matplotlib.get_backend())
 # matplotlib.use('QT5Agg')
 # matplotlib.use('GTK3Agg')
 # matplotlib.use('WebAgg')
@@ -18,6 +19,7 @@ import threading
 import queue
 
 import pyds9
+import multiprocessing
 
 import rss_reduce
 
@@ -53,20 +55,38 @@ def ds9_listener(ds9, return_queue):
 
 def rss_plotter(rss, ds9_queue):
 
+    print("Plotter thread running")
+
     plt.ion()
     fig = plt.figure()
     fig.show()
     plt.show()
 
     ax = fig.add_subplot(111)
+    plt.pause(0.01)
+
     while (True):
 
+        print("Waiting for command")
         ds9_command = ds9_queue.get()
         if (ds9_command is None):
             print("Shutting down plotter")
             break
 
+        print("making plot")
         command, ix, iy = ds9_command
+
+        # x = numpy.linspace(0, ix, 100)
+        # y = x * iy
+        # fig.clf()
+        # ax = fig.add_subplot(111)
+        # ax.scatter(x,y)
+        # # fig.draw()
+        # fig.canvas.draw_idle()
+        # plt.pause(0.05)
+        #
+        # time.sleep(5)
+        # continue
 
         ax.cla()
         ax = fig.add_subplot(111)
@@ -118,41 +138,52 @@ def rss_plotter(rss, ds9_queue):
 
         # fig.show()
         # plt.show()
-        fig.canvas.draw_idle()
-        time.sleep(0.1)
+        plt.pause(0.05)
+        # fig.canvas.draw_idle()
+        # time.sleep(0.1)
 
         # ds9.set("cursor "+reply)
+    print("Plotter thread shutting down")
 
 
 if __name__ == "__main__":
-
     fn = sys.argv[1]
 
     print("Starting ds9 and establishing connection")
     ds9 = pyds9.DS9() #target='DS9:RSS_Explorer', start=True)
 
+    plt.ion()
+    print("Interactive?", plt.isinteractive())
+
+    rss = None
     print("Preparing RSS data cube")
-    rss = rss_reduce.RSS(fn=fn, max_number_files=50, use_reference_pixels=True)
+    rss = rss_reduce.RSS(fn=fn, max_number_files=20, use_reference_pixels=True)
     rss.reduce()
 
+    # load image into ds9
     ds9.set_np2arr(rss.weighted_mean)
 
-    ds9_queue = queue.Queue()
+    ds9_queue = multiprocessing.Queue()
 
     print("starting ds9 listener thread")
-    ds9_thread = threading.Thread(
+    ds9_thread = multiprocessing.Process(
         target=ds9_listener,
         kwargs=dict(ds9=ds9,
                     return_queue=ds9_queue,)
     )
+    ds9_thread.daemon = True
     ds9_thread.start()
 
+    # rss_plotter(rss, ds9_queue)
+
     print("Starting plotter thread")
-    plotter = threading.Thread(
+    plotter = multiprocessing.Process(
         target=rss_plotter,
         kwargs=dict(rss=rss, ds9_queue=ds9_queue),
     )
+    plotter.daemon = True
     plotter.start()
+
 
     ds9_thread.join()
     plotter.join()
