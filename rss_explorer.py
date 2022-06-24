@@ -14,45 +14,29 @@ import numpy
 import astropy.io.fits
 import matplotlib.pyplot as plt
 import time
+import threading
+import queue
 
 import pyds9
 
 import rss_reduce
 
-plt.ion()
+def ds9_listener(ds9, return_queue):
 
+    while(True):
 
-if __name__ == "__main__":
-
-    fn = sys.argv[1]
-
-    print("Starting ds9 and establishing connection")
-    ds9 = pyds9.DS9() #target='DS9:RSS_Explorer', start=True)
-
-    print("Preparing RSS data cube")
-    rss = rss_reduce.RSS(fn=fn, max_number_files=50, use_reference_pixels=True)
-    rss.reduce()
-
-    ds9.set_np2arr(rss.weighted_mean)
-
-    plt.ion()
-    fig = plt.figure()
-    fig.show()
-    # plt.show()
-    # ax = fig.add_subplot(111)
-    while (True):
-
+        # wait for user-interaction from ds9
         try:
             # reply = ds9.get("imexam coordinate image")
             reply = ds9.get("iexam any coordinate image")
             # reply = input("ds9 result")
         except ValueError:
+            return_queue.put(None)
+
             print("Shutting down")
             break
 
-        # reply = ds9.get("crosshair image")
-        # print(reply)
-
+        # interpret the interaction
         try:
             _items = reply.split()
             print(_items)
@@ -63,10 +47,31 @@ if __name__ == "__main__":
         except:
             continue
 
-        # ax.cla()
+        # forward the answer to the worker_queue for plotting
+        return_queue.put((command, ix, iy))
+
+
+def rss_plotter(rss, ds9_queue):
+
+    plt.ion()
+    fig = plt.figure()
+    fig.show()
+    plt.show()
+
+    ax = fig.add_subplot(111)
+    while (True):
+
+        ds9_command = ds9_queue.get()
+        if (ds9_command is None):
+            print("Shutting down plotter")
+            break
+
+        command, ix, iy = ds9_command
+
+        ax.cla()
         ax = fig.add_subplot(111)
+
         if (command == "w"):
-            # ax.cla()
 
             img_flux = rss.image_stack[:, iy, ix]
             min_flux = numpy.min(img_flux)
@@ -93,11 +98,11 @@ if __name__ == "__main__":
         elif (command == "r"):
 
             linearized = rss.linearized_cube[:, iy, ix]
-            diff_flux = numpy.pad(numpy.diff(linearized), (1,0), mode='constant', constant_values=0)
-            diff_time = numpy.pad(numpy.diff(rss.read_times), (1,0), mode='constant', constant_values=0)
+            diff_flux = numpy.pad(numpy.diff(linearized), (1, 0), mode='constant', constant_values=0)
+            diff_time = numpy.pad(numpy.diff(rss.read_times), (1, 0), mode='constant', constant_values=0)
 
             # ax.cla()
-            ax.scatter(rss.read_times, diff_flux/diff_time)
+            ax.scatter(rss.read_times, diff_flux / diff_time)
             ax.axhline(rss.weighted_mean[iy, ix], linestyle='-', color='blue')
             ax.axhline(0., linestyle='--', color="black")
             ax.set_xlabel("Integration time")
@@ -111,11 +116,45 @@ if __name__ == "__main__":
             print("command (%s) not understood -- press -h- for help")
             continue
 
-        fig.show()
-        plt.show()
-        # fig.canvas.draw_idle()
-        # time.sleep(0.001)
+        # fig.show()
+        # plt.show()
+        fig.canvas.draw_idle()
+        time.sleep(0.1)
 
         # ds9.set("cursor "+reply)
+
+
+if __name__ == "__main__":
+
+    fn = sys.argv[1]
+
+    print("Starting ds9 and establishing connection")
+    ds9 = pyds9.DS9() #target='DS9:RSS_Explorer', start=True)
+
+    print("Preparing RSS data cube")
+    rss = rss_reduce.RSS(fn=fn, max_number_files=50, use_reference_pixels=True)
+    rss.reduce()
+
+    ds9.set_np2arr(rss.weighted_mean)
+
+    ds9_queue = queue.Queue()
+
+    print("starting ds9 listener thread")
+    ds9_thread = threading.Thread(
+        target=ds9_listener,
+        kwargs=dict(ds9=ds9,
+                    return_queue=ds9_queue,)
+    )
+    ds9_thread.start()
+
+    print("Starting plotter thread")
+    plotter = threading.Thread(
+        target=rss_plotter,
+        kwargs=dict(rss=rss, ds9_queue=ds9_queue),
+    )
+    plotter.start()
+
+    ds9_thread.join()
+    plotter.join()
 
 
