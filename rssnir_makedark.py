@@ -9,7 +9,7 @@ import astropy.io.fits as pyfits
 
 import rss_reduce
 
-from dev__fitpersistencysignal import _fit_persistency_plus_signal_pixel
+from dev__fitpersistencysignal import fit_persistency_plus_signal_pixel
 
 if __name__ == "__main__":
 
@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
             series = fullseries[~bad]
             times = integ_exp_time[~bad]
-            bestfit = _fit_persistency_plus_signal_pixel(times, series)
+            bestfit = fit_persistency_plus_signal_pixel(times, series)
 
             warm_coefficients[:, y,x] = bestfit
             if ((i%1000) == 0):
