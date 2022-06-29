@@ -289,7 +289,7 @@ class RSS(object):
                 print("error during dark subtraction:\n",e)
 
         # calculate differential stack
-        self.differential_stack = numpy.pad(numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0)))
+        self.differential_stack = numpy.pad(numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))) / self.read_times.reshape((-1,1,1))
         print("diff stack:", self.differential_stack.shape)
 
         # mask out all saturated and/or otherwise bad samples
