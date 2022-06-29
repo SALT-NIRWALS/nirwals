@@ -13,46 +13,6 @@ import astropy.io.fits as pyfits
 import rss_reduce
 
 
-def _persistency_plus_signal_fit_fct(p, read_time):
-    # y = numpy.zeros(x.shape)
-    # for i in range(p.shape[0]):
-    #     y += p[i] * x ** (i + 1)
-    signal = numpy.ones_like(read_time) * p[0] + p[1] * numpy.exp(-read_time/p[2])
-    return signal
-
-
-def _persistency_plus_signal_fit_err_fct(p, read_time, rate, uncert):
-    rate_fit = _persistency_plus_signal_fit_fct(p, read_time)
-    err = uncert #numpy.sqrt(y + 10 ** 2)
-    return ((rate - rate_fit) / err)
-
-
-def fit_persistency_plus_signal_pixel(_x, _y, uncertainties):
-
-    good4fit = numpy.isfinite(_x) & numpy.isfinite(_y)
-    read_time = _x[good4fit]
-    rate = _y[good4fit]
-    uncert = uncertainties[good4fit]
-
-    avg_rate = numpy.mean(rate)
-
-    fallback_solution = [avg_rate, 0, 0]
-    if (numpy.sum(good4fit) < 5):
-        # if there's no good data we can't do any fitting
-        return numpy.array(fallback_solution)  # assume perfect linearity
-
-    # variables are: linear_rate, persistency_amplitude, persistency_timescale
-    pinit = [numpy.min(rate), 2*numpy.max(rate), 3.5]
-    fit = scipy.optimize.leastsq(
-        func=_persistency_plus_signal_fit_err_fct, x0=pinit,
-        args=(read_time, rate, uncert),
-        full_output=1
-    )
-    # print(fit)
-    pfit = fit[0]
-
-    return pfit
-
 
 if __name__ == "__main__":
 
@@ -94,44 +54,8 @@ if __name__ == "__main__":
             (1755,542), (1754,542), (1751,506), (1752,506), (1753,506), (1754,506),
             ]:
 
-            _x = x-1
-            _y = y-1
+            rss.fit_signal_with_persistency_singlepixel(x, y, debug=True, plot=True)
 
-            bad_data = rss.bad_data_mask[:, _y, _x]
-            # series = rss.linearized_cube[:, _y, _x]
-            rate_series = rss.differential_stack[:, _y, _x]
-
-            # TODO: implement better noise model, accounting for read-noise and gain
-            uncertainties = numpy.sqrt(rss.image_stack[:, _y, _x])
-            # print(series.shape)
-
-            numpy.savetxt(
-                "persistency_dump_%04dx%04d.txt" % (x,y),
-                numpy.array([rss.read_times, rate_series, uncertainties, bad_data]).T,
-            )
-
-            bestfit = fit_persistency_plus_signal_pixel(
-                rss.read_times[~bad_data], rate_series[~bad_data], uncertainties[~bad_data]
-            )
-            print("BESTFIT:", x,y,bestfit)
-
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.scatter(rss.read_times[~bad_data], rate_series[~bad_data], s=8, c='blue')
-            ax.scatter(rss.read_times[bad_data], rate_series[bad_data], s=4, c='grey')
-            timeaxis = numpy.linspace(0, numpy.nanmax(rss.read_times), 250)
-            # print("read-times = \n", timeaxis)
-            modely = _persistency_plus_signal_fit_fct(bestfit, timeaxis)
-            # print("best-fit:", bestfit)
-            # print("model-fit = \n", modely)
-
-            ax.plot(timeaxis, modely)
-            plot_fn = "%s____persistency_plus_signal__%04d-%04d.png" % (rss.filebase, x,y)
-            fig.suptitle("F = %.0f + %.0f x exp(-t/%.3fs)" % (bestfit[0], bestfit[1], bestfit[2]))
-            ax.set_xlabel("integration time [seconds]")
-            ax.set_ylabel("flux above read #0 [counts]")
-            fig.savefig(plot_fn, dpi=200)
-            plt.close(fig)
 
         # mean_rate_subtracted = rss.linearized_cube - integ_exp_time.reshape((-1,1,1)) * darkrate.reshape((1, darkrate.shape[0], darkrate.shape[1]))
         # print("mean rate shape:", mean_rate_subtracted.shape)
