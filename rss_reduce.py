@@ -186,7 +186,7 @@ class RSS(object):
         #     _filelist = _filelist[:max_number_files]
 
         # setup the data-cube to hold all the data
-        if (max_number_files is not None and self.n_groups > max_number_files):
+        if (max_number_files is not None and max_number_files > 0 and self.n_groups > max_number_files):
             self.n_groups = max_number_files
             print("Limiting input data to %d read-groups" % (max_number_files))
 
