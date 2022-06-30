@@ -2,7 +2,11 @@
 import logging
 import multiprocessing
 import os
+import queue
 import sys
+import threading
+import time
+
 import numpy
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -73,6 +77,36 @@ def _persistency_plus_signal_fit_err_fct(p, read_time, rate, uncert):
     rate_fit = _persistency_plus_signal_fit_fct(p, read_time)
     err = uncert #numpy.sqrt(y + 10 ** 2)
     return ((rate - rate_fit) / err)
+
+def persistency_thread_worker(rss, row_queue, name="Worker"):
+
+    while (True):
+        row = row_queue.get()
+        if (row is None):
+            break
+
+        print(name, row)
+        nx = rss.nx
+
+        linebuffer = numpy.full((6, rss.nx), fill_value=numpy.NaN)
+
+        for x in range(500,650): #nx):
+            results = rss.fit_signal_with_persistency_singlepixel(
+                x=x, y=row, debug=False, plot=False
+            )
+            if (results is not None):
+                best_fit, fit_uncertainties = results
+
+                linebuffer[0:3, x] = best_fit
+                linebuffer[3:6, x] = fit_uncertainties
+
+        rss.persistency_fit_global[:, row, :] = linebuffer
+
+        # time.sleep(numpy.random.random(1) * 0.1)
+
+
+    return
+
 
 darktype_GOOD = 0
 darktype_COLD = 1
@@ -627,6 +661,42 @@ class RSS(object):
         return
 
     def fit_signal_with_persistency(self):
+
+        # iy,ix = numpy.indices((self.ny,self.nx))
+        # ixy = numpy.dstack([ix,iy]).reshape((-1,2))
+        # print(ixy.shape)
+        # print(ixy[:10])
+        self.persistency_fit_global = numpy.full(
+            (6, self.ny, self.nx), fill_value=numpy.NaN)
+
+        n_threads = 8
+        # prepare and fill job-queue - split work into chunks of individual lines
+        row_queue = queue.Queue()
+        for y in numpy.arange(self.ny):
+            row_queue.put(y)
+
+        # setup threads, fill queue with stop signals, but don't start threads just yet
+        fit_threads = []
+        for n in range(n_threads):
+            t = threading.Thread(
+                target=persistency_thread_worker,
+                kwargs=dict(rss=self, row_queue=row_queue, name="FitWorker_%02d" % (n+1)),
+            )
+            fit_threads.append(t)
+            row_queue.put(None)
+
+        # once all threads are setup, start them
+        for t in fit_threads:
+            t.start()
+
+        # and then wait until they are all done with their work
+        for t in fit_threads:
+            t.join()
+
+        # for now write the fit output
+        print("dumping fit results")
+        out_tmp = pyfits.PrimaryHDU(data=self.persistency_fit_global)
+        out_tmp.writeto("persistency_fit_dump.fits", overwrite=True)
         return
 
     def fit_signal_with_persistency_singlepixel(self, x, y, debug=False, plot=False):
@@ -657,9 +727,11 @@ class RSS(object):
         avg_rate = numpy.mean(rate)
 
         fallback_solution = [avg_rate, 0, 0]
+        fallback_uncertainty = [0,0,-1.]
+
         if (numpy.sum(good4fit) < 5):
             # if there's no good data we can't do any fitting
-            return numpy.array(fallback_solution)  # assume perfect linearity
+            return None #numpy.array(fallback_solution), numpy.array(fallback_uncertainty)  # assume perfect linearity
 
         # variables are: linear_rate, persistency_amplitude, persistency_timescale
         pinit = [numpy.min(rate), 2 * numpy.max(rate), 3.5]
@@ -671,10 +743,19 @@ class RSS(object):
         # print(fit)
         bestfit = fit[0]
 
+        # Compute uncertainty on the shift and rotation
+        if (fit[1] is not None):
+            fit_uncert = numpy.sqrt(numpy.diag(fit[1]))
+        else:
+            fit_uncert = numpy.array([-99, -99., -99.]) #print(fit[1])
+
+        #print(numpy.diag(fit[1]))
+
+
         # bestfit = fit_persistency_plus_signal_pixel(
         #     rss.read_times[~bad_data], rate_series[~bad_data], uncertainties[~bad_data]
         # )
-        print("BESTFIT:", x, y, bestfit)
+        # print("BESTFIT:", x, y, bestfit, "   /// uncertainties: ", fit_uncert)
 
         if (plot):
             fig = plt.figure()
@@ -694,6 +775,8 @@ class RSS(object):
             ax.set_ylabel("flux above read #0 [counts]")
             fig.savefig(plot_fn, dpi=200)
             plt.close(fig)
+
+        return bestfit, fit_uncert
 
     def plot_pixel_curve(self, x, y, filebase=None,
                          cumulative=True, differential=False,
