@@ -82,7 +82,72 @@ def _persistency_plus_signal_fit_err_fct(p, read_time, rate, uncert):
     err = uncert #numpy.sqrt(y + 10 ** 2)
     return ((rate - rate_fit) / err)
 
-def persistency_thread_worker(rss, row_queue, name="Worker"):
+
+
+def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
+
+    rate_series = differential_cube[:, y, x]
+
+    # TODO: implement better noise model, accounting for read-noise and gain
+    uncertainties = numpy.sqrt(linearized_cube[:, y, x])
+
+    good4fit = numpy.isfinite(read_times) & \
+               numpy.isfinite(rate_series) & \
+               numpy.isfinite(uncertainties)
+
+    read_time = read_times[good4fit]
+    rate = rate_series[good4fit]
+    uncert = uncertainties[good4fit]
+
+    avg_rate = numpy.mean(rate)
+
+    fallback_solution = [avg_rate, 0, 0]
+    fallback_uncertainty = [0, 0, -1.]
+
+    if (numpy.sum(good4fit) < 5):
+        # if there's no good data we can't do any fitting
+        return None  # numpy.array(fallback_solution), numpy.array(fallback_uncertainty)  # assume perfect linearity
+
+    # variables are: linear_rate, persistency_amplitude, persistency_timescale
+    pinit = [numpy.min(rate), 2 * numpy.max(rate), 3.5]
+    fit = scipy.optimize.leastsq(
+        func=_persistency_plus_signal_fit_err_fct, x0=pinit,
+        args=(read_time, rate, uncert),
+        full_output=1
+    )
+    # print(fit)
+    bestfit = fit[0]
+
+    # Compute uncertainty on the shift and rotation
+    if (fit[1] is not None):
+        fit_uncert = numpy.sqrt(numpy.diag(fit[1]))
+    else:
+        fit_uncert = numpy.array([-99, -99., -99.])  # print(fit[1])
+
+    return bestfit, fit_uncert
+
+
+def persistency_process_worker(
+        row_queue,
+        shmem_differential_cube, shmem_linearized_cube, shmem_persistency_fit,
+        read_times,
+        n_frames, nx=2048, ny=2048,
+        name="Worker"):
+
+    # make the shared memory available as numpy arrays
+    linearized_cube = numpy.ndarray(
+        shape=(n_frames,ny,nx), dtype=numpy.float32,
+        buffer=shmem_linearized_cube.buf
+    )
+    differential_cube = numpy.ndarray(
+        shape=(n_frames, ny, nx), dtype=numpy.float32,
+        buffer=shmem_differential_cube.buf
+    )
+    persistency_fit = numpy.ndarray(
+        shape=(6, ny, nx), dtype=numpy.float32,
+        buffer=shmem_persistency_fit.buf,
+    )
+
 
     while (True):
         row = row_queue.get()
@@ -90,13 +155,18 @@ def persistency_thread_worker(rss, row_queue, name="Worker"):
             break
 
         print(name, row)
-        nx = rss.nx
 
-        linebuffer = numpy.full((6, rss.nx), fill_value=numpy.NaN)
+        linebuffer = numpy.full((6, nx), fill_value=numpy.NaN)
 
-        for x in range(500,650): #nx):
-            results = rss.fit_signal_with_persistency_singlepixel(
-                x=x, y=row, debug=False, plot=False
+        for x in range(500,1000): #nx):
+            # results = rss.fit_signal_with_persistency_singlepixel(
+            #     x=x, y=row, debug=False, plot=False
+            # )
+            results = persistency_fit_pixel(
+                differential_cube=differential_cube,
+                linearized_cube=linearized_cube,
+                read_times=read_times,
+                x=x, y=row,
             )
             if (results is not None):
                 best_fit, fit_uncertainties = results
@@ -104,7 +174,7 @@ def persistency_thread_worker(rss, row_queue, name="Worker"):
                 linebuffer[0:3, x] = best_fit
                 linebuffer[3:6, x] = fit_uncertainties
 
-        rss.persistency_fit_global[:, row, :] = linebuffer
+        persistency_fit[:, row, :] = linebuffer
 
         # time.sleep(numpy.random.random(1) * 0.1)
 
@@ -703,15 +773,23 @@ class RSS(object):
 
         # prepare and fill job-queue - split work into chunks of individual lines
         row_queue = multiprocessing.JoinableQueue()
-        for y in numpy.arange(self.ny):
+        for y in numpy.arange(1000,1500): #self.ny):
             row_queue.put(y)
 
         # setup threads, fill queue with stop signals, but don't start threads just yet
         fit_threads = []
         for n in range(n_workers):
             t = multiprocessing.Process(
-                target=persistency_thread_worker,
-                kwargs=dict(rss=self, row_queue=row_queue, name="FitWorker_%02d" % (n+1)),
+                target=persistency_process_worker,
+                kwargs=dict(
+                    row_queue=row_queue,
+                    shmem_differential_cube=self.shmem_differential_cube,
+                    shmem_linearized_cube=self.shmem_linearized_cube,
+                    shmem_persistency_fit=self.shmem_persistency_fit_global,
+                    read_times=self.read_times,
+                    n_frames=self.linearized_cube.shape[0],
+                    nx=self.nx, ny=self.ny,
+                    name="FitWorker_%02d" % (n+1)),
             )
             t.daemon = True
             fit_threads.append(t)
