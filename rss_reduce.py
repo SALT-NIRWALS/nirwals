@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+
+import sys
+print(sys.path)
+
 import logging
 import multiprocessing
 import os
 import queue
-import sys
 import threading
 import time
 
@@ -14,6 +17,7 @@ import scipy
 import scipy.optimize
 import itertools
 import multiprocessing
+import multiprocessing.shared_memory
 import argparse
 
 from astropy import log
@@ -300,7 +304,16 @@ class RSS(object):
         if (linearized is None):
             print("No linearized data found, using raw data instead")
             linearized = reset_frame_subtracted
-        self.linearized_cube = linearized
+
+        # prepare shared memory to receive the linearized data cube
+        self.shmem_linearized_cube = multiprocessing.shared_memory.SharedMemory(
+            create=True, size=linearized.nbytes
+        )
+        self.linearized_cube = numpy.ndarray(
+            shape=linearized.shape, dtype=numpy.float32,
+            buffer=self.shmem_linearized_cube.buf
+        )
+        self.linearized_cube[:,:,:] = linearized[:,:,:]
 
         dark_cube = numpy.zeros_like(linearized)
         if (dark_fn is None):
@@ -320,13 +333,24 @@ class RSS(object):
                             * self.diff_exptime \
                             * dark.reshape((1, dark.shape[0], dark.shape[1]))
                 print("shape of dark cube: ", dark_cube.shape)
-                linearized -= dark_cube
+                self.linearized_cube -= dark_cube
             except Exception as e:
                 print("error during dark subtraction:\n",e)
 
+        # allocate shared memory for the differential stack and calculate from
+        # the linearized cube
         # calculate differential stack
-        self.differential_stack = numpy.pad(numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))) / self.read_times.reshape((-1,1,1))
-        print("diff stack:", self.differential_stack.shape)
+        self.shmem_differential_cube = multiprocessing.shared_memory.SharedMemory(
+            create=True, size=self.linearized_cube.nbytes
+        )
+        self.differential_cube = numpy.ndarray(
+            shape=self.linearized_cube.shape, dtype=numpy.float32,
+            buffer=self.shmem_differential_cube.buf,
+        )
+        self.differential_cube[:, :, :] = numpy.pad(
+            numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))
+        ) / self.read_times.reshape((-1,1,1))
+        print("diff stack:", self.differential_cube.shape)
 
         # mask out all saturated and/or otherwise bad samples
         max_count_rates = -1000 # TODO: FIX THIS numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
@@ -338,7 +362,7 @@ class RSS(object):
         if (mask_bad_data is not None and (mask_bad_data & self.mask_SATURATED) > 0):
             bad_data = bad_data | (self.image_stack > self.saturation_level)
         if (mask_bad_data is not None and (mask_bad_data & self.mask_LOW_RATE) > 0):
-            bad_data = bad_data | (self.differential_stack < self.saturation_fraction*max_count_rates)
+            bad_data = bad_data | (self.differential_cube < self.saturation_fraction * max_count_rates)
         if (mask_bad_data is not None and (mask_bad_data & self.mask_BAD_DARK) > 0):
             bad_data = bad_data | (dark_cube >= linearized)
         if (mask_bad_data is not None and (mask_bad_data & self.mask_NEGATIVE) > 0):
@@ -352,7 +376,7 @@ class RSS(object):
         #            (linearized < 0)
 
         print("Cleaning image cube")
-        self.clean_stack = self.differential_stack.copy()
+        self.clean_stack = self.differential_cube.copy()
         self.clean_stack[bad_data] = numpy.NaN
         self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
 
@@ -379,7 +403,7 @@ class RSS(object):
             pyfits.PrimaryHDU(data=linearized).writeto(bn+"stack_linearized.fits", overwrite=True)
             print("writing darkcube")
             pyfits.PrimaryHDU(data=dark_cube).writeto(bn+"stack_darkcube.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.differential_stack).writeto(bn+"stack_diff.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.differential_cube).writeto(bn + "stack_diff.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.clean_stack).writeto(bn+"stack_clean.fits", overwrite=True)
             # pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
             # pyfits.PrimaryHDU(data=self.reduced_image_plain).writeto("final_image.fits", overwrite=True)
@@ -660,28 +684,36 @@ class RSS(object):
         hdulist.writeto(fn, overwrite=True)
         return
 
-    def fit_signal_with_persistency(self):
+    def fit_signal_with_persistency(self, n_workers=0):
 
-        # iy,ix = numpy.indices((self.ny,self.nx))
-        # ixy = numpy.dstack([ix,iy]).reshape((-1,2))
-        # print(ixy.shape)
-        # print(ixy[:10])
-        self.persistency_fit_global = numpy.full(
-            (6, self.ny, self.nx), fill_value=numpy.NaN)
+        # by default use all existing CPU cores for processing
+        if (n_workers <= 0):
+            n_workers = multiprocessing.cpu_count()
 
-        n_threads = 8
+        # allocate a datacube for the persistency fit results in shared memory
+        # to make it read- and write-accessible from across all worker processes
+        self.shmem_persistency_fit_global = multiprocessing.shared_memory.SharedMemory(
+            create=True, size=6*self.nx*self.ny*4,
+        )
+        self.persistency_fit_global = numpy.ndarray(
+            shape=(6, self.ny, self.ny), dtype=numpy.float32,
+            buffer=self.shmem_persistency_fit_global.buf,
+        )
+        self.persistency_fit_global[:,:,:] = numpy.NaN
+
         # prepare and fill job-queue - split work into chunks of individual lines
-        row_queue = queue.Queue()
+        row_queue = multiprocessing.JoinableQueue()
         for y in numpy.arange(self.ny):
             row_queue.put(y)
 
         # setup threads, fill queue with stop signals, but don't start threads just yet
         fit_threads = []
-        for n in range(n_threads):
-            t = threading.Thread(
+        for n in range(n_workers):
+            t = multiprocessing.Process(
                 target=persistency_thread_worker,
                 kwargs=dict(rss=self, row_queue=row_queue, name="FitWorker_%02d" % (n+1)),
             )
+            t.daemon = True
             fit_threads.append(t)
             row_queue.put(None)
 
@@ -705,7 +737,7 @@ class RSS(object):
         _y = y - 1
 
         bad_data = self.bad_data_mask[:, _y, _x]
-        rate_series = self.differential_stack[:, _y, _x]
+        rate_series = self.differential_cube[:, _y, _x]
 
         # TODO: implement better noise model, accounting for read-noise and gain
         uncertainties = numpy.sqrt(self.image_stack[:, _y, _x])
