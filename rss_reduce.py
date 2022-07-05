@@ -83,7 +83,7 @@ def _persistency_plus_signal_fit_err_fct(p, read_time, rate, uncert):
     return ((rate - rate_fit) / err)
 
 
-
+n_persistency_values = 7
 def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
 
     rate_series = differential_cube[:, y, x]
@@ -144,7 +144,7 @@ def persistency_process_worker(
         buffer=shmem_differential_cube.buf
     )
     persistency_fit = numpy.ndarray(
-        shape=(6, ny, nx), dtype=numpy.float32,
+        shape=(n_persistency_values, ny, nx), dtype=numpy.float32,
         buffer=shmem_persistency_fit.buf,
     )
 
@@ -156,9 +156,9 @@ def persistency_process_worker(
 
         print(name, row)
 
-        linebuffer = numpy.full((6, nx), fill_value=numpy.NaN)
+        linebuffer = numpy.full((n_persistency_values, nx), fill_value=numpy.NaN)
 
-        for x in range(500,1000): #nx):
+        for x in range(nx):
             # results = rss.fit_signal_with_persistency_singlepixel(
             #     x=x, y=row, debug=False, plot=False
             # )
@@ -173,6 +173,11 @@ def persistency_process_worker(
 
                 linebuffer[0:3, x] = best_fit
                 linebuffer[3:6, x] = fit_uncertainties
+
+                integrated_persistency = \
+                    best_fit[1] * best_fit[2] * (
+                    numpy.exp(-read_times[1]/best_fit[2]) - numpy.exp(-numpy.nanmax(read_times)/best_fit[2]))
+                linebuffer[6, x] = integrated_persistency
 
         persistency_fit[:, row, :] = linebuffer
 
@@ -763,17 +768,17 @@ class RSS(object):
         # allocate a datacube for the persistency fit results in shared memory
         # to make it read- and write-accessible from across all worker processes
         self.shmem_persistency_fit_global = multiprocessing.shared_memory.SharedMemory(
-            create=True, size=6*self.nx*self.ny*4,
+            create=True, size=n_persistency_values*self.nx*self.ny*4,
         )
         self.persistency_fit_global = numpy.ndarray(
-            shape=(6, self.ny, self.ny), dtype=numpy.float32,
+            shape=(n_persistency_values, self.ny, self.ny), dtype=numpy.float32,
             buffer=self.shmem_persistency_fit_global.buf,
         )
         self.persistency_fit_global[:,:,:] = numpy.NaN
 
         # prepare and fill job-queue - split work into chunks of individual lines
         row_queue = multiprocessing.JoinableQueue()
-        for y in numpy.arange(1000,1500): #self.ny):
+        for y in numpy.arange(self.ny):
             row_queue.put(y)
 
         # setup threads, fill queue with stop signals, but don't start threads just yet
