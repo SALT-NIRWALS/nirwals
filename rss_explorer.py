@@ -139,7 +139,8 @@ def rss_plotter(rss, ds9_queue):
         elif (command == "r"):
 
             linearized = rss.linearized_cube[:, iy, ix]
-            diff_flux = numpy.pad(numpy.diff(linearized), (1, 0), mode='constant', constant_values=0)
+            # diff_flux = numpy.pad(numpy.diff(linearized), (1, 0), mode='constant', constant_values=0)
+            diff_flux = rss.differential_cube[:, iy, ix]
             diff_time = numpy.pad(numpy.diff(rss.read_times), (1, 0), mode='constant', constant_values=0)
 
             # ax.cla()
@@ -170,6 +171,10 @@ def rss_plotter(rss, ds9_queue):
 
 if __name__ == "__main__":
     fn = sys.argv[1]
+    try:
+        persistency_fn = sys.argv[2]
+    except:
+        persistency_fn = None
 
     print("Starting ds9 and establishing connection")
     ds9 = pyds9.DS9() #target='DS9:RSS_Explorer', start=True)
@@ -181,6 +186,8 @@ if __name__ == "__main__":
     print("Preparing RSS data cube")
     rss = rss_reduce.RSS(fn=fn, max_number_files=20, use_reference_pixels=True)
     rss.reduce()
+    print("Using persistency from %s" % (persistency_fn))
+    rss.load_precalculated_results(persistency_fit_fn=persistency_fn)
 
     # load image into ds9
     ds9.set_np2arr(rss.weighted_mean)
