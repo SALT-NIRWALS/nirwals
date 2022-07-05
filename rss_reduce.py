@@ -218,6 +218,8 @@ class RSS(object):
         self.nonlin_fn = None
         self.nonlinearity_cube = None
 
+        self.alloc_persistency = False
+
         # store values we may/will need during reduction
         self.max_number_files = -1 if max_number_files is None else max_number_files
         self.saturation_level = saturation_level
@@ -759,12 +761,7 @@ class RSS(object):
         hdulist.writeto(fn, overwrite=True)
         return
 
-    def fit_signal_with_persistency(self, n_workers=0):
-
-        # by default use all existing CPU cores for processing
-        if (n_workers <= 0):
-            n_workers = multiprocessing.cpu_count()
-
+    def _alloc_persistency(self):
         # allocate a datacube for the persistency fit results in shared memory
         # to make it read- and write-accessible from across all worker processes
         self.shmem_persistency_fit_global = multiprocessing.shared_memory.SharedMemory(
@@ -775,6 +772,16 @@ class RSS(object):
             buffer=self.shmem_persistency_fit_global.buf,
         )
         self.persistency_fit_global[:,:,:] = numpy.NaN
+        self.alloc_persistency = True
+
+    def fit_signal_with_persistency(self, n_workers=0):
+
+        # by default use all existing CPU cores for processing
+        if (n_workers <= 0):
+            n_workers = multiprocessing.cpu_count()
+
+        if (not self.alloc_persistency):
+            self._alloc_persistency()
 
         # prepare and fill job-queue - split work into chunks of individual lines
         row_queue = multiprocessing.JoinableQueue()
