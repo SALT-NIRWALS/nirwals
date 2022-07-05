@@ -1164,6 +1164,30 @@ class RSS(object):
 
         return pfit #self.image_stack[1, y-1, x-1]
 
+    def load_precalculated_results(self, weighted_image_fn=None, persistency_fit_fn=None):
+
+        if (weighted_image_fn is not None and os.path.isfile(weighted_image_fn)):
+            print("Loading weighted results from file isn't implemented yet")
+            pass
+
+        if (persistency_fit_fn is not None and os.path.isfile(persistency_fit_fn)):
+
+            # make sure we have compatible memory
+            if (not self.alloc_persistency):
+                self._alloc_persistency()
+
+            # read FITS file and copy the image into the allocated memory buffer
+            print("Loading pre-calculated persistency results [%s]" % (
+                persistency_fit_fn)
+            )
+            hdulist = pyfits.open(persistency_fit_fn)
+            self.persistency_fit_global[:,:,:] = hdulist[0].data[:,:,:]
+
+            pass
+
+
+
+
 
 if __name__ == "__main__":
 
