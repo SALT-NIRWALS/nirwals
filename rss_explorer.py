@@ -111,7 +111,8 @@ def rss_plotter(rss, ds9_queue):
         # time.sleep(5)
         # continue
 
-        ax.cla()
+        # ax.cla()
+        fig.clf()
         ax = fig.add_subplot(111)
         fig.suptitle("Pixel position: x=%d // y=%d" % (ix+1, iy+1))
 
