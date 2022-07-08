@@ -5,7 +5,7 @@ print(matplotlib.get_backend())
 # matplotlib.use('QT5Agg')
 # matplotlib.use('GTK3Agg')
 # matplotlib.use('WebAgg')
-# matplotlib.use('TkAgg')
+matplotlib.use('TkAgg')
 # matplotlib.use('WebAgg')
 
 
