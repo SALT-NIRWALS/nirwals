@@ -35,9 +35,12 @@ def ds9_listener(ds9, return_queue):
             # reply = ds9.get("imexam coordinate image")
             reply = ds9.get("iexam any coordinate image")
             # reply = input("ds9 result")
+        except TypeError as te:
+            print(te)
+            continue
+
         except ValueError:
             return_queue.put(None)
-
             print("Shutting down")
             break
 
