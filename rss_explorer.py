@@ -115,6 +115,10 @@ def rss_plotter(rss, ds9_queue):
         ax = fig.add_subplot(111)
         fig.suptitle("Pixel position: x=%d // y=%d" % (ix+1, iy+1))
 
+        print(rss.read_times)
+
+        pixel_noise = numpy.sqrt(rss.linearized_cube[:, iy, ix])
+
         if (command == "w"):
 
             img_flux = rss.image_stack[:, iy, ix]
@@ -146,9 +150,27 @@ def rss_plotter(rss, ds9_queue):
             diff_flux = rss.differential_cube[:, iy, ix]
             diff_time = numpy.pad(numpy.diff(rss.read_times), (1, 0), mode='constant', constant_values=0)
 
+            max_flux = numpy.nanmax(diff_flux + 2*pixel_noise)
+            min_flux = numpy.nanmin(diff_flux - 2*pixel_noise)
+
             # ax.cla()
-            ax.scatter(rss.read_times, diff_flux / diff_time)
+            ax.scatter(rss.read_times, diff_flux) # / diff_time)
             ax.axhline(rss.weighted_mean[iy, ix], linestyle='-', color='blue')
+            ax.set_ylim((min_flux, max_flux))
+
+            try:
+                # also plot the persistency fit, if available
+                persistency_fit_data = rss.persistency_fit_global[:, iy, ix]
+                print(ix, iy, persistency_fit_data)
+                pf = rss_reduce._persistency_plus_signal_fit_fct(persistency_fit_data[:3], rss.read_times)
+                ax.plot(rss.read_times, pf)
+                ax.set_title("fit flux: %.3f cts/s [%.2f] (persistency: %.2g / tau=%.2f s)" % (
+                    persistency_fit_data[0],  rss.weighted_mean[iy, ix],
+                    persistency_fit_data[1], persistency_fit_data[2]
+                ))
+            except:
+                ax.set_title("avg flux: %.2f cts/s" % (rss.weighted_mean[iy, ix]))
+                pass
             ax.axhline(0., linestyle='--', color="black")
             ax.set_xlabel("Integration time")
             ax.set_ylabel("Differential flux increase between reads [counts/second]")
