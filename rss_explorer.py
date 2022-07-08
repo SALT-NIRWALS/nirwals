@@ -129,6 +129,7 @@ def rss_plotter(rss, ds9_queue):
             ax.scatter(rss.read_times, img_flux)
             ax.set_xlabel("Integration time [seconds]")
             ax.set_ylabel("counts")
+            ax.set_title("Raw read counts [no corrections]")
 
         elif (command == "s"):
             # ax.cla()
@@ -143,6 +144,7 @@ def rss_plotter(rss, ds9_queue):
             ax.plot(rss.read_times, fit_line, "b-")
             ax.set_xlabel("Integration time [seconds]")
             ax.set_ylabel("counts")
+            ax.set_title("Read counts [ref pixel corrected & linearized]")
 
         elif (command == "r"):
 
