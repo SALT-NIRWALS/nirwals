@@ -1185,6 +1185,26 @@ class RSS(object):
 
             pass
 
+    def __del__(self):
+        print("Running destructor and cleaning up shared memory")
+        # clean up shared memory
+        try:
+            self.shmem_linearized_cube.close()
+            self.shmem_linearized_cube.unlink()
+        except:
+            pass
+
+        try:
+            self.shmem_differential_cube.close()
+            self.shmem_differential_cube.unlink()
+        except:
+            pass
+
+        try:
+            self.shmem_persistency_fit_global.close()
+            self.shmem_persistency_fit_global.unlink()
+        except:
+            pass
 
 
 
