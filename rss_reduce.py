@@ -10,6 +10,8 @@ import queue
 import threading
 import time
 
+import multiparallel_logging as mplog
+
 import numpy
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -1210,6 +1212,13 @@ class RSS(object):
 
 
 if __name__ == "__main__":
+
+    mplog.setup_logging(debug_filename="debug.log",
+                        log_filename="run_analysis.log")
+    mpl_logger = logging.getLogger('matplotlib')
+    mpl_logger.setLevel(logging.WARNING)
+
+    logger = logging.getLogger("RunAnalysis")
 
     cmdline = argparse.ArgumentParser()
     cmdline.add_argument("--maxfiles", dest="max_number_files", default=None, type=int,
