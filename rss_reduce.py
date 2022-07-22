@@ -274,7 +274,7 @@ class RSS(object):
 
             # print(full_filename, os.path.isfile(full_filename))
 
-        print("\n -- ".join(self.filelist))
+        self.logger.debug("Loading filelist:\n"+"\n -- ".join(self.filelist))
 
         return
 
@@ -326,11 +326,15 @@ class RSS(object):
             img_group = hdr['GROUP']
             img_read = hdr['READ']
             img_exptime = hdr['ACTEXP'] / 1000000. # convert time from raw microseconds to seconds
+            print("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
 
-            if (img_group >= max_number_files):
+            if (max_number_files > 0 and img_group >= max_number_files):
+                print("img-group > max-number-file")
                 continue
 
             self.raw_read_times[img_read-1, img_group-1] = img_exptime
+            print(self.raw_read_times)
+
             self.image_stack_raw[img_read-1, img_group-1, :, :] = imgdata
 
 
@@ -342,15 +346,35 @@ class RSS(object):
             # break
 
         # calculate the initial image stack
+        print("#groups=%d // #ramps=%d // #reads=%d" % (self.n_groups, self.n_ramps, self.n_reads))
+        if (self.n_groups == 1 and self.n_reads >= 1):
+            # this is a plain fowler mode, so calculate pair-wise differences
+            print("Using fowler-sampling strategy")
+            self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
+            print("@@@@@@@@@@@@@", self.image_stack.shape)
+            self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
+
+        elif (self.n_groups > 1):
+            # up-the-ramp sampling.
+            print("Using up-the-ramp strategy")
+            self.image_stack = numpy.nanmean(self.image_stack_raw, axis=0)
+            print(self.raw_read_times)
+            self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
+
+        else:
+            print("No idea what's going here and what to do with this data - HELP!!!!")
+            return
+
+
 #         self.image_stack = numpy.array(self._image_stack, dtype=numpy.float32)
-        self.image_stack = numpy.nanmean(self.image_stack_raw, axis=0)
+
+        # self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
 
         print("stack before/after:", self.image_stack_raw.shape, self.image_stack.shape)
 
-        self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
-        print(self.read_times)
+        print("read-times:", self.read_times)
 
-        print(self.image_stack.shape)
+        print("stack shape:", self.image_stack.shape)
 
         # delete raw stack to clean up memory
         del self.image_stack_raw
@@ -1253,8 +1277,9 @@ if __name__ == "__main__":
                    dark_fn=args.dark_fn)
         rss.write_results(fn="%s.%s.fits" % (rss.filebase, args.output_postfix))
 
-        rss.plot_pixel_curve(818,1033)
-        rss.plot_pixel_curve(1700,555)
-        rss.plot_pixel_curve(250,1660)
+        # rss.plot_pixel_curve(818,1033)
+        # rss.plot_pixel_curve(1700,555)
+        # rss.plot_pixel_curve(505,1660)
 
+        del rss
         print("all done!")
