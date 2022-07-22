@@ -76,7 +76,7 @@ def mypause(interval):
             canvas.start_event_loop(interval)
             return
 
-def rss_plotter(rss, ds9_queue):
+def rss_plotter(rss, ds9_queue, save_plots=False):
 
     print("Plotter thread running")
 
@@ -131,6 +131,10 @@ def rss_plotter(rss, ds9_queue):
             ax.set_ylabel("counts")
             ax.set_title("Raw read counts [no corrections]")
 
+            if (save_plots):
+                plot_filename = "%s___%04dx%04d___rawreads.png" % (rss.filebase, ix+1, iy+1)
+                fig.savefig(plot_filename, tight_layout=True, dpi=200)
+
         elif (command == "s"):
             # ax.cla()
 
@@ -146,7 +150,11 @@ def rss_plotter(rss, ds9_queue):
             ax.set_ylabel("counts")
             ax.set_title("Read counts [ref pixel corrected & linearized]")
 
-        elif (command == "r"):
+            if (save_plots):
+                plot_filename = "%s___%04dx%04d___netreads.png" % (rss.filebase, ix+1, iy+1)
+                fig.savefig(plot_filename, tight_layout=True, dpi=200)
+
+        elif (command == "r" or command=="t"):
 
             linearized = rss.linearized_cube[:, iy, ix]
             # diff_flux = numpy.pad(numpy.diff(linearized), (1, 0), mode='constant', constant_values=0)
@@ -159,8 +167,17 @@ def rss_plotter(rss, ds9_queue):
             # ax.cla()
             ax.scatter(rss.read_times, diff_flux) # / diff_time)
             ax.axhline(rss.weighted_mean[iy, ix], linestyle='-', color='blue')
-            ax.set_ylim((min_flux, max_flux))
 
+            if (command == "r"):
+                max_flux = numpy.nanmax(diff_flux + 2 * pixel_noise)
+                min_flux = numpy.nanmin(diff_flux - 2 * pixel_noise)
+                ax.set_ylim(min_flux, max_flux)
+            else:
+                n_start = diff_flux.shape[0] * 2 // 3
+                max_flux = numpy.nanmax(diff_flux[n_start:])
+                min_flux = numpy.nanmin(diff_flux[n_start:])
+                buf = (max_flux - min_flux) / 10.
+                ax.set_ylim(min_flux-buf, max_flux+buf)
             try:
                 # also plot the persistency fit, if available
                 persistency_fit_data = rss.persistency_fit_global[:, iy, ix]
@@ -177,7 +194,10 @@ def rss_plotter(rss, ds9_queue):
             ax.axhline(0., linestyle='--', color="black")
             ax.set_xlabel("Integration time")
             ax.set_ylabel("Differential flux increase between reads [counts/second]")
-            ax.set_title("title here")
+
+            if (save_plots):
+                plot_filename = "%s___%04dx%04d___rate.png" % (rss.filebase, ix+1, iy+1)
+                fig.savefig(plot_filename, tight_layout=True, dpi=200)
 
         elif (command == 'h'):
             print("Stay tuned, help is on the way")
@@ -204,6 +224,12 @@ if __name__ == "__main__":
     except:
         persistency_fn = None
 
+    display_filename = None
+    try:
+        display_filename = sys.argv[3]
+    except:
+        pass
+
     print("Starting ds9 and establishing connection")
     ds9 = pyds9.DS9() #target='DS9:RSS_Explorer', start=True)
 
@@ -212,13 +238,18 @@ if __name__ == "__main__":
 
     rss = None
     print("Preparing RSS data cube")
-    rss = rss_reduce.RSS(fn=fn, max_number_files=20, use_reference_pixels=True)
+    rss = rss_reduce.RSS(fn=fn, max_number_files=50, use_reference_pixels=True)
     rss.reduce()
     print("Using persistency from %s" % (persistency_fn))
     rss.load_precalculated_results(persistency_fit_fn=persistency_fn)
 
     # load image into ds9
     ds9.set_np2arr(rss.weighted_mean)
+
+    if (display_filename is not None and os.path.isfile(display_filename)):
+        # load the specified image into frame 2
+        ds9.set("frame new")
+        ds9.set("file %s" % (display_filename))
 
     ds9_queue = multiprocessing.Queue()
 
@@ -236,7 +267,7 @@ if __name__ == "__main__":
     print("Starting plotter thread")
     plotter = multiprocessing.Process(
         target=rss_plotter,
-        kwargs=dict(rss=rss, ds9_queue=ds9_queue),
+        kwargs=dict(rss=rss, ds9_queue=ds9_queue, save_plots=True),
     )
     plotter.daemon = True
     plotter.start()
@@ -245,4 +276,7 @@ if __name__ == "__main__":
     ds9_thread.join()
     plotter.join()
 
+    # delete rss to clean up shared memory
+    del rss
 
+    print("all done!")
