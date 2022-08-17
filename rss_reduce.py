@@ -293,7 +293,7 @@ class RSS(object):
         if (max_number_files is None):
             max_number_files = self.max_number_files
         if (self.image_stack_initialized):
-            print("stack already initialized, skipping repeat try")
+            self.logger.debug("stack already initialized, skipping repeat try")
             return
 
         self._image_stack = []
@@ -314,7 +314,7 @@ class RSS(object):
             fill_value=numpy.NaN, dtype=numpy.float32)
         self.raw_read_times = numpy.full((self.n_reads, self.n_groups), fill_value=numpy.NaN)
 
-        print("raw image cube dimensions:", self.image_stack_raw.shape)
+        self.logger.debug("raw image cube dimensions: %s" % (str(self.image_stack_raw.shape)))
 
         # TODO: Add proper handling for combined Fowler and up-the-ramp sampling
         for fn in _filelist:
@@ -326,14 +326,14 @@ class RSS(object):
             img_group = hdr['GROUP']
             img_read = hdr['READ']
             img_exptime = hdr['ACTEXP'] / 1000000. # convert time from raw microseconds to seconds
-            print("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
+            self.logger.debug("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
 
             if (max_number_files > 0 and img_group >= max_number_files):
-                print("img-group > max-number-file")
+                self.logger.debug("img-group > max-number-file --> skipping this file")
                 continue
 
             self.raw_read_times[img_read-1, img_group-1] = img_exptime
-            print(self.raw_read_times)
+            self.logger.debug("raw read times: %s" % (str(self.raw_read_times)))
 
             self.image_stack_raw[img_read-1, img_group-1, :, :] = imgdata
 
@@ -346,23 +346,23 @@ class RSS(object):
             # break
 
         # calculate the initial image stack
-        print("#groups=%d // #ramps=%d // #reads=%d" % (self.n_groups, self.n_ramps, self.n_reads))
+        self.logger.info("#groups=%d // #ramps=%d // #reads=%d" % (self.n_groups, self.n_ramps, self.n_reads))
         if (self.n_groups == 1 and self.n_reads >= 1):
             # this is a plain fowler mode, so calculate pair-wise differences
-            print("Using fowler-sampling strategy")
+            self.logger.info("Using fowler-sampling strategy")
             self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
             print("@@@@@@@@@@@@@", self.image_stack.shape)
             self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
 
         elif (self.n_groups > 1):
             # up-the-ramp sampling.
-            print("Using up-the-ramp strategy")
+            self.logger.info("Using up-the-ramp strategy")
             self.image_stack = numpy.nanmean(self.image_stack_raw, axis=0)
             print(self.raw_read_times)
             self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
 
         else:
-            print("No idea what's going here and what to do with this data - HELP!!!!")
+            self.logger.critical("No idea what's going here and what to do with this data - HELP!!!!")
             return
 
 
@@ -370,11 +370,11 @@ class RSS(object):
 
         # self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
 
-        print("stack before/after:", self.image_stack_raw.shape, self.image_stack.shape)
+        self.logger.debug("stack before/after: %s --> %s" % (str(self.image_stack_raw.shape), str(self.image_stack.shape)))
 
-        print("read-times:", self.read_times)
+        self.logger.info("read-times: %s" % (str(self.read_times)))
 
-        print("stack shape:", self.image_stack.shape)
+        self.logger.debug("stack shape: %s" % (str(self.image_stack.shape)))
 
         # delete raw stack to clean up memory
         del self.image_stack_raw
@@ -401,11 +401,11 @@ class RSS(object):
             reset_frame_subtracted = self.image_stack - self.reset_frame
 
         # apply any necessary corrections for nonlinearity and other things
-        print("Applying non-linearity corrections")
+        self.logger.info("Applying non-linearity corrections")
         linearized = self.apply_nonlinearity_corrections(reset_frame_subtracted)
         # print("linearized = ", linearized)
         if (linearized is None):
-            print("No linearized data found, using raw data instead")
+            self.logger.warning("No linearized data found, using raw data instead")
             linearized = reset_frame_subtracted
 
         # prepare shared memory to receive the linearized data cube
@@ -420,13 +420,13 @@ class RSS(object):
 
         dark_cube = numpy.zeros_like(linearized)
         if (dark_fn is None):
-            print("No dark correction requested, skipping")
+            self.logger.warning("No dark correction requested, skipping")
         elif (not os.path.isfile(dark_fn)):
-            print("Dark requested (%s) but not found" % (dark_fn))
+            self.logger.warning("Dark requested (%s) but not found" % (dark_fn))
         else:
             try:
                 # load dark-rate image
-                print("Loading dark-corrections from %s" % (dark_fn))
+                self.logger.info("Loading dark-corrections from %s" % (dark_fn))
                 dark_hdu = pyfits.open(dark_fn)
                 dark = dark_hdu['DARKRATE'].data
 
@@ -435,10 +435,10 @@ class RSS(object):
                 dark_cube = (numpy.arange(linearized.shape[0], dtype=numpy.float).reshape((-1,1,1)) + 1) \
                             * self.diff_exptime \
                             * dark.reshape((1, dark.shape[0], dark.shape[1]))
-                print("shape of dark cube: ", dark_cube.shape)
+                self.logger.debug("shape of dark cube: %s" % (dark_cube.shape))
                 self.linearized_cube -= dark_cube
             except Exception as e:
-                print("error during dark subtraction:\n",e)
+                self.logger.error("error during dark subtraction:\n%s" % (str(e)))
 
         # allocate shared memory for the differential stack and calculate from
         # the linearized cube
@@ -453,14 +453,14 @@ class RSS(object):
         self.differential_cube[:, :, :] = numpy.pad(
             numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))
         ) / self.read_times.reshape((-1,1,1))
-        print("diff stack:", self.differential_cube.shape)
+        self.logger.debug("diff stack: %s" % (str(self.differential_cube.shape)))
 
         # mask out all saturated and/or otherwise bad samples
         max_count_rates = -1000 # TODO: FIX THIS numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
         # print("max counrates:", max_count_rates.shape)
 
         # TODO: implement full iterative outlier rejection here
-        print("Identifying bad pixels")
+        self.logger.info("Identifying bad/dead/saturated/negative pixels")
         bad_data = numpy.zeros_like(self.image_stack, dtype=numpy.bool)
         if (mask_bad_data is not None and (mask_bad_data & self.mask_SATURATED) > 0):
             bad_data = bad_data | (self.image_stack > self.saturation_level)
@@ -478,13 +478,13 @@ class RSS(object):
         #            (dark_cube >= linearized) | \
         #            (linearized < 0)
 
-        print("Cleaning image cube")
+        self.logger.info("Cleaning image cube")
         self.clean_stack = self.differential_cube.copy()
         self.clean_stack[bad_data] = numpy.NaN
         self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
 
         # calculate a average countrate image
-        print("calculating final image from stack")
+        self.logger.info("calculating final image from stack")
         # image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
         self.reduced_image_plain = numpy.nanmean(self.clean_stack, axis=0)
         noise = numpy.sqrt(self.image_stack)
@@ -498,13 +498,13 @@ class RSS(object):
         # ratios = linearized / linearized[3:4, :, :]
 
         if (write_dumps):
-            print("Writing all dumps")
+            self.logger.info("Writing all dumps")
             bn = self.filebase + "__"
-            print("Dump-file basename: ", bn)
+            self.logger.debug("Dump-file basename: %s" % (bn))
             pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_raw.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_zerosub.fits", overwrite=True)
             pyfits.PrimaryHDU(data=linearized).writeto(bn+"stack_linearized.fits", overwrite=True)
-            print("writing darkcube")
+            self.logger.debug("writing darkcube")
             pyfits.PrimaryHDU(data=dark_cube).writeto(bn+"stack_darkcube.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.differential_cube).writeto(bn + "stack_diff.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.clean_stack).writeto(bn+"stack_clean.fits", overwrite=True)
@@ -520,7 +520,7 @@ class RSS(object):
 
     def subtract_first_read(self):
         if (self.first_read_subtracted):
-            print("First read already subtracted, skipping")
+            self.logger.debug("First read already subtracted, skipping")
             return
 
         if (self.first_read is None):
@@ -747,9 +747,9 @@ class RSS(object):
         if (os.path.isfile(nonlin_fn)):
             try:
                 hdulist = pyfits.open(nonlin_fn)
-                print("Reading nonlinearity corrections from %s" % (nonlin_fn))
+                self.logger.info("Reading nonlinearity corrections from %s" % (nonlin_fn))
                 nonlinearity_cube = hdulist[0].data
-                print("CORR shape:", nonlinearity_cube.shape)
+                self.logger.debug("CORR shape: %s" % (nonlinearity_cube.shape))
             except:
                 return False
 
@@ -759,14 +759,14 @@ class RSS(object):
     def apply_nonlinearity_corrections(self, img_cube=None):
 
         if (self.nonlinearity_cube is None):
-            print("No nonlinearity corrections loaded, skipping")
+            self.logger.warning("No nonlinearity corrections loaded, skipping")
             return None
 
         # self.subtract_first_read()
         if (img_cube is None):
             img_cube = self.image_stack
 
-        print("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
+        self.logger.debug("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
 
         linearized_cube = \
             self.nonlinearity_cube[0:1, :, :] * numpy.power(img_cube, 1) + \
@@ -783,7 +783,7 @@ class RSS(object):
             pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
             pyfits.ImageHDU(data=self.noise_image, name='NOISE')
         ])
-        print("Writing reduced results to %s" % (fn))
+        self.logger.info("Writing reduced results to %s" % (fn))
         hdulist.writeto(fn, overwrite=True)
         return
 
@@ -842,7 +842,7 @@ class RSS(object):
             t.join()
 
         # for now write the fit output
-        print("dumping fit results")
+        self.logger.debug("dumping fit results")
         out_tmp = pyfits.PrimaryHDU(data=self.persistency_fit_global)
         out_tmp.writeto("persistency_fit_dump.fits", overwrite=True)
         return
@@ -1030,7 +1030,7 @@ class RSS(object):
 
     def dump_pixeldata(self, x, y, filebase=None, extras=None):
 
-        print("dumping pixeldata for pixel @ %d / %d" % (x,y))
+        self.logger.debug("dumping pixeldata for pixel @ %d / %d" % (x,y))
 
         _x = x-1
         _y = y-1
@@ -1057,12 +1057,12 @@ class RSS(object):
 
 
     def _parallel_worker(self, job_queue, result_queue, execute_function, is_in_class=True):
-        print("Worker has started")
+        self.logger.debug("Worker has started")
         while (True):
             job = job_queue.get()
             if (job is None):
                 job_queue.task_done()
-                print("Worker shutting down")
+                self.logger.debug("Worker shutting down")
                 break
 
             [x, y] = job
@@ -1102,17 +1102,17 @@ class RSS(object):
         iy, ix = numpy.indices((y2-y1, x2-x1))
         iy += y1
         ix += x1
-        print(iy.shape)
+        # self.logger.debug(iy.shape)
 
         # prepare work and results queue for data exchange with the workers
         job_queue = multiprocessing.JoinableQueue()
         result_queue = multiprocessing.Queue()
         ixy = numpy.dstack([ix, iy]).reshape((-1, 2))
-        print(ixy.shape)
-        print(ixy[:10])
+        # self.logger.debug(ixy.shape)
+        # self.logger.debug(ixy[:10])
 
         # prepare and start the workers
-        print("Creating workers")
+        self.logger.debug("Creating workers")
         worker_processes = []
         if (n_workers is None):
             n_workers = multiprocessing.cpu_count()
@@ -1131,7 +1131,7 @@ class RSS(object):
             worker_processes.append(p)
 
         # prepare jobqueue
-        print("preparing jobs")
+        self.logger.debug("preparing jobs")
         n_jobs = 0
         for _xy in ixy:
             job_queue.put(_xy)
@@ -1142,7 +1142,7 @@ class RSS(object):
             job_queue.put(None)
 
         # wait for completion
-        print("Waiting for completion")
+        self.logger.debug("Waiting for completion")
         job_queue.join()
 
         # receive all the results back from the workers
@@ -1193,7 +1193,7 @@ class RSS(object):
     def load_precalculated_results(self, weighted_image_fn=None, persistency_fit_fn=None):
 
         if (weighted_image_fn is not None and os.path.isfile(weighted_image_fn)):
-            print("Loading weighted results from file isn't implemented yet")
+            self.logger.warning("Loading weighted results from file isn't implemented yet")
             pass
 
         if (persistency_fit_fn is not None and os.path.isfile(persistency_fit_fn)):
@@ -1203,7 +1203,7 @@ class RSS(object):
                 self._alloc_persistency()
 
             # read FITS file and copy the image into the allocated memory buffer
-            print("Loading pre-calculated persistency results [%s]" % (
+            self.logger.info("Loading pre-calculated persistency results [%s]" % (
                 persistency_fit_fn)
             )
             hdulist = pyfits.open(persistency_fit_fn)
@@ -1212,7 +1212,7 @@ class RSS(object):
             pass
 
     def __del__(self):
-        print("Running destructor and cleaning up shared memory")
+        # self.logger.debug("Running destructor and cleaning up shared memory")
         # clean up shared memory
         try:
             self.shmem_linearized_cube.close()
