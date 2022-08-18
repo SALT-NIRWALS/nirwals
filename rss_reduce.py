@@ -1276,7 +1276,8 @@ if __name__ == "__main__":
     for fn in args.files:
         # fn = sys.argv[1]
 
-        rss = RSS(fn, max_number_files=args.max_number_files)
+        rss = RSS(fn, max_number_files=args.max_number_files,
+                   use_reference_pixels=args.use_ref_pixels)
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
