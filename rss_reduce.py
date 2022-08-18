@@ -518,6 +518,10 @@ class RSS(object):
             pyfits.PrimaryHDU(data=self.weighted_mean).writeto(bn+"final_image_weighted.fits", overwrite=True)
             pyfits.PrimaryHDU(data=self.inv_noise).writeto(bn+"final_inv_noise.fits", overwrite=True)
 
+            n_good_pixels = numpy.sum(~bad_data, axis=0)
+            print("#goodpixels", n_good_pixels.shape)
+            pyfits.PrimaryHDU(data=n_good_pixels).writeto(bn+"n_good_pixels.fits", overwrite=True)
+
         return
 
     def subtract_first_read(self):
