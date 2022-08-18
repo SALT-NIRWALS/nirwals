@@ -7,6 +7,7 @@ import numpy
 import scipy
 import scipy.optimize
 import matplotlib.pyplot as plt
+import time
 
 import astropy.io.fits as pyfits
 
@@ -25,6 +26,8 @@ if __name__ == "__main__":
                          help="output filename")
     cmdline.add_argument("--dumps", dest="write_dumps", default=False, action='store_true',
                          help="write intermediate process data [default: NO]")
+    cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
+                         help="use reference pixels [default: NO]")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -34,7 +37,8 @@ if __name__ == "__main__":
 
     for fn in args.files:
 
-        rss = rss_reduce.RSS(fn, max_number_files=args.max_number_files)
+        rss = rss_reduce.RSS(fn, max_number_files=args.max_number_files,
+                   use_reference_pixels=args.use_ref_pixels)
 
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
@@ -48,14 +52,21 @@ if __name__ == "__main__":
         # now that we have the dark-rate, apply the correction to the frame to estimate the noise
         # integ_exp_time = numpy.arange(rss.image_stack.shape[0]) * delta_exptime
 
+        rss.fit_signal_with_persistency()
+        continue
+
         for (x,y) in [(1384,576), (1419,605), (1742,540), (1722,514),
             (1785,550), (1784,550), (1782,541), (1793,552), (1801,551), (1771,534), (1761,546), (1762,546),
             (1763,546), (1764,546), (1764,547), (1764,549), (1761,551), (1759,552), (1757,542), (1756,542),
             (1755,542), (1754,542), (1751,506), (1752,506), (1753,506), (1754,506),
             ]:
 
-            rss.fit_signal_with_persistency_singlepixel(x, y, debug=True, plot=True)
-
+            t1 = time.time()
+            # rss.fit_signal_with_persistency_singlepixel(x, y, debug=True, plot=True)
+            rss.fit_signal_with_persistency_singlepixel(x, y, debug=False, plot=False)
+            t2 = time.time()
+            dt  = t2-t1
+            print("this took %f seconds (%f)" % (dt, dt*4e6))
 
         # mean_rate_subtracted = rss.linearized_cube - integ_exp_time.reshape((-1,1,1)) * darkrate.reshape((1, darkrate.shape[0], darkrate.shape[1]))
         # print("mean rate shape:", mean_rate_subtracted.shape)
