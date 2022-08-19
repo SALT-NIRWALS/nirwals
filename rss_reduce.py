@@ -89,13 +89,15 @@ n_persistency_values = 8
 def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
 
     rate_series = differential_cube[:, y, x]
+    linear_series = linearized_cube[:, y, x]
 
     # TODO: implement better noise model, accounting for read-noise and gain
     uncertainties = numpy.sqrt(linearized_cube[:, y, x])
 
     good4fit = numpy.isfinite(read_times) & \
                numpy.isfinite(rate_series) & \
-               numpy.isfinite(uncertainties)
+               numpy.isfinite(uncertainties) & \
+               (linear_series < 62000)
 
     read_time = read_times[good4fit]
     rate = rate_series[good4fit]
@@ -126,7 +128,7 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
     else:
         fit_uncert = numpy.array([-99, -99., -99.])  # print(fit[1])
 
-    return bestfit, fit_uncert
+    return bestfit, fit_uncert, good4fit
 
 
 def persistency_process_worker(
