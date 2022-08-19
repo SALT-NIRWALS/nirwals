@@ -85,7 +85,7 @@ def _persistency_plus_signal_fit_err_fct(p, read_time, rate, uncert):
     return ((rate - rate_fit) / err)
 
 
-n_persistency_values = 7
+n_persistency_values = 8
 def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
 
     rate_series = differential_cube[:, y, x]
@@ -150,13 +150,16 @@ def persistency_process_worker(
         buffer=shmem_persistency_fit.buf,
     )
 
+    logger = logging.getLogger("Persistency_%s" % (name))
 
     while (True):
-        row = row_queue.get()
-        if (row is None):
+        cmd = row_queue.get()
+        if (cmd is None):
             break
+        (row, full_fit_mask) = cmd
 
-        print(name, row)
+        logger.info("row % 4d: % 4d full fits (%d)" % (row, numpy.sum(full_fit_mask), nx))
+        # print("row % 4d: % 4d full fits (%d)" % (row, numpy.sum(full_fit_mask), nx))
 
         linebuffer = numpy.full((n_persistency_values, nx), fill_value=numpy.NaN)
 
@@ -164,22 +167,54 @@ def persistency_process_worker(
             # results = rss.fit_signal_with_persistency_singlepixel(
             #     x=x, y=row, debug=False, plot=False
             # )
-            results = persistency_fit_pixel(
-                differential_cube=differential_cube,
-                linearized_cube=linearized_cube,
-                read_times=read_times,
-                x=x, y=row,
-            )
-            if (results is not None):
-                best_fit, fit_uncertainties = results
 
-                linebuffer[0:3, x] = best_fit
-                linebuffer[3:6, x] = fit_uncertainties
+            if (full_fit_mask[x]):
+                # do a full fit for this pixel
+                results = persistency_fit_pixel(
+                    differential_cube=differential_cube,
+                    linearized_cube=linearized_cube,
+                    read_times=read_times,
+                    x=x, y=row,
+                )
+                if (results is not None):
+                    best_fit, fit_uncertainties, good4fit = results
 
-                integrated_persistency = \
-                    best_fit[1] * best_fit[2] * (
-                    numpy.exp(-read_times[1]/best_fit[2]) - numpy.exp(-numpy.nanmax(read_times)/best_fit[2]))
-                linebuffer[6, x] = integrated_persistency
+                    linebuffer[0:3, x] = best_fit
+                    linebuffer[3:6, x] = fit_uncertainties
+                    linebuffer[7, x] = numpy.sum(good4fit)
+
+                    integrated_persistency = \
+                        best_fit[1] * best_fit[2] * (
+                        numpy.exp(-read_times[1]/best_fit[2]) - numpy.exp(-numpy.nanmax(read_times)/best_fit[2]))
+                    linebuffer[6, x] = integrated_persistency
+
+            else:
+                # no need for a full fit, just calculate a simple slope
+                diff_reads = differential_cube[:, row, x]
+                raw_reads = linearized_cube[:, row, x]
+                good_data = (raw_reads > 0) & (raw_reads < 62000)
+                #print(diff_reads.shape)
+
+                _median, _sigma = numpy.NaN, numpy.NaN
+                for iter in range(3):
+                    if (numpy.sum(good_data) < 1):
+                        # no more good data left, so stick with what we had before
+                        break
+                    _stats = numpy.nanpercentile(diff_reads[good_data], [16,50,84])
+                    _median = _stats[1]
+                    _sigma = 0.5 * (_stats[2] - _stats[0])
+                    outlier = (diff_reads > (_median + 3*_sigma)) | (diff_reads < (_median - 3*_sigma))
+
+                    good_data[outlier] = False
+
+                linebuffer[0,x] = _median
+                linebuffer[3,x] = _sigma
+                linebuffer[7,x] = numpy.sum(good_data)
+
+                # linebuffer = numpy.array([_median, numpy.NaN, numpy.NaN,    # slope, persistency amp & time
+                #                           _sigma, numpy.NaN, numpy.NaN,     # errors/uncertainties
+                #                           numpy.NaN]                        # integrated persistency signal
+                #                          )
 
         persistency_fit[:, row, :] = linebuffer
 
@@ -409,6 +444,7 @@ class RSS(object):
             linearized = reset_frame_subtracted
 
         # prepare shared memory to receive the linearized data cube
+        self.logger.debug("Allocating shared memory for linearized cube")
         self.shmem_linearized_cube = multiprocessing.shared_memory.SharedMemory(
             create=True, size=linearized.nbytes
         )
@@ -417,6 +453,7 @@ class RSS(object):
             buffer=self.shmem_linearized_cube.buf
         )
         self.linearized_cube[:,:,:] = linearized[:,:,:]
+        self.logger.debug("linearized cube initialized")
 
         dark_cube = numpy.zeros_like(linearized)
         if (dark_fn is None):
@@ -443,6 +480,7 @@ class RSS(object):
         # allocate shared memory for the differential stack and calculate from
         # the linearized cube
         # calculate differential stack
+        self.logger.debug("Allocating shared memory for differential cube")
         self.shmem_differential_cube = multiprocessing.shared_memory.SharedMemory(
             create=True, size=self.linearized_cube.nbytes
         )
@@ -450,6 +488,9 @@ class RSS(object):
             shape=self.linearized_cube.shape, dtype=numpy.float32,
             buffer=self.shmem_differential_cube.buf,
         )
+        self.logger.debug("differential cube allocated")
+
+        self.logger.debug("calculating differential cube")
         self.differential_cube[:, :, :] = numpy.pad(
             numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))
         ) / self.read_times.reshape((-1,1,1))
@@ -806,7 +847,7 @@ class RSS(object):
         self.persistency_fit_global[:,:,:] = numpy.NaN
         self.alloc_persistency = True
 
-    def fit_signal_with_persistency(self, n_workers=0):
+    def fit_signal_with_persistency(self, n_workers=0, previous_frame=None):
 
         # by default use all existing CPU cores for processing
         if (n_workers <= 0):
@@ -817,8 +858,19 @@ class RSS(object):
 
         # prepare and fill job-queue - split work into chunks of individual lines
         row_queue = multiprocessing.JoinableQueue()
-        for y in numpy.arange(self.ny):
-            row_queue.put(y)
+
+        print("xxx")
+        if (previous_frame is not None and os.path.isfile(previous_frame)):
+            self.logger.info("Using previous frame (%s) to speed up persistency correction" % (previous_frame))
+            prev_hdu = pyfits.open(previous_frame)
+            prev_img = prev_hdu[0].data
+            threshold = 58000
+            need_full_persistency_fit = prev_img > threshold
+            for y in numpy.arange(self.ny):
+                row_queue.put((y, need_full_persistency_fit[y, :]))
+        else:
+            for y in numpy.arange(self.ny):
+                row_queue.put((y, numpy.ones((self.nx), dtype=bool)))
 
         # setup threads, fill queue with stop signals, but don't start threads just yet
         fit_threads = []
