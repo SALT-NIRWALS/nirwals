@@ -9,6 +9,9 @@ import scipy.optimize
 import matplotlib.pyplot as plt
 import time
 
+import multiparallel_logging as mplog
+import logging
+
 import astropy.io.fits as pyfits
 
 import rss_reduce
@@ -16,6 +19,13 @@ import rss_reduce
 
 
 if __name__ == "__main__":
+
+    mplog.setup_logging(debug_filename="debug.log",
+                        log_filename="run_analysis.log")
+    mpl_logger = logging.getLogger('matplotlib')
+    mpl_logger.setLevel(logging.WARNING)
+
+    logger = logging.getLogger("RunAnalysis")
 
     cmdline = argparse.ArgumentParser()
     cmdline.add_argument("--maxfiles", dest="max_number_files", default=None, type=int,
@@ -28,6 +38,8 @@ if __name__ == "__main__":
                          help="write intermediate process data [default: NO]")
     cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
                          help="use reference pixels [default: NO]")
+    cmdline.add_argument("--previous", dest="previous_frame", type=str, default=None,
+                         help="last frame of previous exposure")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -52,7 +64,12 @@ if __name__ == "__main__":
         # now that we have the dark-rate, apply the correction to the frame to estimate the noise
         # integ_exp_time = numpy.arange(rss.image_stack.shape[0]) * delta_exptime
 
-        rss.fit_signal_with_persistency()
+        print(args.previous_frame)
+        rss.fit_signal_with_persistency(previous_frame=args.previous_frame)
+
+        out_tmp = pyfits.PrimaryHDU(data=rss.persistency_fit_global)
+        out_tmp.writeto(args.output_fn, overwrite=True)
+
         continue
 
         for (x,y) in [(1384,576), (1419,605), (1742,540), (1722,514),
