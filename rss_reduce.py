@@ -239,9 +239,10 @@ class RSS(object):
     mask_NEGATIVE = 0x0008
 
     def __init__(self, fn, max_number_files=-1,
-                 saturation_level=60000,
+                 saturation_level=62000,
                  saturation_fraction=0.25, saturation_percentile=95,
-                 use_reference_pixels=True):
+                 use_reference_pixels=True,
+                 mask_saturated_pixels=False):
 
         self.fn = fn
         self.filelist = []
@@ -264,6 +265,7 @@ class RSS(object):
         self.saturation_level = saturation_level
         self.saturation_fraction = saturation_fraction
         self.saturation_percentile = saturation_percentile
+        self.mask_saturated_pixels = mask_saturated_pixels
 
         self.read_exposure_setup()
 
@@ -325,7 +327,7 @@ class RSS(object):
     #     self.n_groups = hdr['NGROUPS']
     #     self.diff_exptime = self.exptime / self.n_groups
 
-    def load_all_files(self, max_number_files=None):
+    def load_all_files(self, max_number_files=None, mask_saturated_pixels=False):
 
         if (max_number_files is None):
             max_number_files = self.max_number_files
@@ -357,8 +359,13 @@ class RSS(object):
         for fn in _filelist:
             hdulist = pyfits.open(fn)
             hdr = hdulist[0].header
-            imgdata = hdulist[0].data
+            imgdata = hdulist[0].data.astype(numpy.float32)
             # hdulist.info()
+
+            # mask all saturated pixels if requested
+            if (mask_saturated_pixels):
+                print("masking out saturated pixels (%.1f)" % (self.saturation_level))
+                imgdata[imgdata > self.saturation_level] = numpy.Inf
 
             img_group = hdr['GROUP']
             img_read = hdr['READ']
@@ -418,9 +425,9 @@ class RSS(object):
 
         self.image_stack_initialized = True
 
-    def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None):
+    def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None, mask_saturated_pixels=False):
 
-        self.load_all_files()
+        self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
 
         if (self.use_reference_pixels):
             self.logger.info("Applying reference pixel corrections")
