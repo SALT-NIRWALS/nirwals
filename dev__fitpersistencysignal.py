@@ -50,12 +50,14 @@ if __name__ == "__main__":
     for fn in args.files:
 
         rss = rss_reduce.RSS(fn, max_number_files=args.max_number_files,
-                   use_reference_pixels=args.use_ref_pixels)
+                   use_reference_pixels=args.use_ref_pixels,
+                   mask_saturated_pixels=True)
 
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
-                   mask_bad_data=rss_reduce.RSS.mask_SATURATED)
+                   mask_bad_data=rss_reduce.RSS.mask_SATURATED,
+                   mask_saturated_pixels=True)
 
         # Figure out what the incremental exposure time per read is
         # exptime = rss.first_header['USEREXP'] / 1000. # raw values are in milli-seconds
