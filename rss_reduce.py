@@ -1264,7 +1264,7 @@ class RSS(object):
             pass
 
         if (persistency_fit_fn is not None and os.path.isfile(persistency_fit_fn)):
-
+            self.logger.info("Loading canned persistency results from %s" % (persistency_fit_fn))
             # make sure we have compatible memory
             if (not self.alloc_persistency):
                 self._alloc_persistency()
@@ -1275,6 +1275,8 @@ class RSS(object):
             )
             hdulist = pyfits.open(persistency_fit_fn)
             self.persistency_fit_global[:,:,:] = hdulist[0].data[:,:,:]
+        else:
+            self.logger.warning("Unable to load previous persistency results (%s)" % (persistency_fit_fn))
 
             pass
 
