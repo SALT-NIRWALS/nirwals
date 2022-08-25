@@ -21,6 +21,10 @@ import queue
 import pyds9
 import multiprocessing
 
+import multiparallel_logging as mplog
+import logging
+
+
 import rss_reduce
 
 
@@ -116,7 +120,7 @@ def rss_plotter(rss, ds9_queue, save_plots=False):
         ax = fig.add_subplot(111)
         fig.suptitle("Pixel position: x=%d // y=%d" % (ix+1, iy+1))
 
-        print(rss.read_times)
+        # print(rss.read_times)
 
         pixel_noise = numpy.sqrt(rss.linearized_cube[:, iy, ix])
 
@@ -180,6 +184,7 @@ def rss_plotter(rss, ds9_queue, save_plots=False):
                 ax.set_ylim(min_flux-buf, max_flux+buf)
             try:
                 # also plot the persistency fit, if available
+                print("Checking for persistency")
                 persistency_fit_data = rss.persistency_fit_global[:, iy, ix]
                 print(ix, iy, persistency_fit_data)
                 pf = rss_reduce._persistency_plus_signal_fit_fct(persistency_fit_data[:3], rss.read_times)
@@ -218,6 +223,13 @@ def rss_plotter(rss, ds9_queue, save_plots=False):
 
 
 if __name__ == "__main__":
+
+    mplog.setup_logging(debug_filename="debug.log",
+                        log_filename="run_analysis.log")
+    mpl_logger = logging.getLogger('matplotlib')
+    mpl_logger.setLevel(logging.WARNING)
+
+
     fn = sys.argv[1]
     try:
         persistency_fn = sys.argv[2]
