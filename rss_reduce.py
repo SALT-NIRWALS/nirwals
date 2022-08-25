@@ -108,9 +108,9 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
     fallback_solution = [avg_rate, 0, 0]
     fallback_uncertainty = [0, 0, -1.]
 
-    if (numpy.sum(good4fit) < 5):
+    if (numpy.sum(good4fit) < 3):
         # if there's no good data we can't do any fitting
-        return None  # numpy.array(fallback_solution), numpy.array(fallback_uncertainty)  # assume perfect linearity
+        return None,None,good4fit  # numpy.array(fallback_solution), numpy.array(fallback_uncertainty)  # assume perfect linearity
 
     # variables are: linear_rate, persistency_amplitude, persistency_timescale
     pinit = [numpy.min(rate), 2 * numpy.max(rate), 3.5]
@@ -178,17 +178,17 @@ def persistency_process_worker(
                     read_times=read_times,
                     x=x, y=row,
                 )
-                if (results is not None):
-                    best_fit, fit_uncertainties, good4fit = results
-
+                best_fit, fit_uncertainties, good4fit = results
+                if (best_fit is not None):
                     linebuffer[0:3, x] = best_fit
                     linebuffer[3:6, x] = fit_uncertainties
-                    linebuffer[7, x] = numpy.sum(good4fit)
 
                     integrated_persistency = \
                         best_fit[1] * best_fit[2] * (
                         numpy.exp(-read_times[1]/best_fit[2]) - numpy.exp(-numpy.nanmax(read_times)/best_fit[2]))
                     linebuffer[6, x] = integrated_persistency
+
+                linebuffer[7, x] = numpy.sum(good4fit)
 
             else:
                 # no need for a full fit, just calculate a simple slope
