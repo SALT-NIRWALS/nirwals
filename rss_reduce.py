@@ -1291,7 +1291,10 @@ class RSS(object):
         dir_index = rss_filepicker.PreviousFilePicker(search_dir)
         prior_fn, delta_seconds = dir_index.find_closest(self.ref_header)
 
-        self.logger.info("Found %s, taken %.2f seconds prior to %s" % (prior_fn, delta_seconds, self.ref_header['FILE']))
+        if (prior_fn is None):
+            self.logger.warn("Unable to find prior frame as persistency reference")
+        else:
+            self.logger.info("Found %s, taken %.2f seconds prior to %s" % (prior_fn, delta_seconds, self.ref_header['FILE']))
 
         return prior_fn, delta_seconds
 
@@ -1388,14 +1391,16 @@ if __name__ == "__main__":
                 elif (os.path.isdir(opt)):
                     logger.info("Searching for optimal reference frame in --> %s <--" % (opt))
                     xxx = rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
-                    print(xxx)
+                    # print(xxx)
                     ref_fn, delta_t = xxx #rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
                     if (ref_fn is not None):
                         logger.info("Using optimized persistency mode using automatic ref-fn: %s (Dt=%.3f)" % (ref_fn, delta_t))
+                        rss.fit_signal_with_persistency(previous_frame=ref_fn)
+                        have_persistency_results = True
                     else:
-                        logger.info("No previous frame found, defaulting to all pixels")
-                    rss.fit_signal_with_persistency(previous_frame=ref_fn)
-                    have_persistency_results = True
+                        logger.warning("No previous frame found, skipping persistency fit")
+                        # rss.fit_signal_with_persistency(previous_frame=ref_fn)
+                        # have_persistency_results = True
                 else:
                     logger.info("Unknown option to best mode (found: %s), skipping persistency modeling" % (opt))
         else:
