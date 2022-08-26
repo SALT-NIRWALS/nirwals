@@ -80,5 +80,5 @@ class PreviousFilePicker( object ):
                 closest_dt = numpy.fabs(delta_seconds)
                 closest_fn = fn
 
-        return closest_fn, closest_dt
+        return os.path.abspath(os.path.join(self.search_dir, closest_fn)), closest_dt
 
