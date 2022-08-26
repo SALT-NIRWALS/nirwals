@@ -9,6 +9,8 @@ import os
 import queue
 import threading
 import time
+import glob
+import datetime
 
 import multiparallel_logging as mplog
 
@@ -27,6 +29,8 @@ log.setLevel('ERROR')
 
 import warnings
 warnings.filterwarnings('ignore')
+
+import rss_filepicker
 
 import astropy
 print(astropy.__path__)
@@ -1280,6 +1284,18 @@ class RSS(object):
 
             pass
 
+    def find_previous_exposure(self, search_dir):
+
+        self.logger.debug("Finding previous exposure (%s)" % (search_dir))
+
+        dir_index = rss_filepicker.PreviousFilePicker(search_dir)
+        prior_fn, delta_seconds = dir_index.find_closest(self.ref_header)
+
+        self.logger.info("Found %s, taken %.2f seconds prior to %s" % (prior_fn, delta_seconds, self.ref_header['FILE']))
+
+        return prior_fn, delta_seconds
+
+
     def __del__(self):
         # self.logger.debug("Running destructor and cleaning up shared memory")
         # clean up shared memory
@@ -1302,8 +1318,6 @@ class RSS(object):
             pass
 
 
-
-
 if __name__ == "__main__":
 
     mplog.setup_logging(debug_filename="debug.log",
@@ -1324,6 +1338,10 @@ if __name__ == "__main__":
                          help="calibration dark")
     cmdline.add_argument("--output", dest="output_postfix", type=str, default="reduced",
                          help="addition to output filename")
+
+    cmdline.add_argument("--persistency", dest="persistency_mode", type=str, default="quick",
+                         help="persistency mode")
+
     # cmdline.add_argument("healpix32", nargs="+", type=int,
     #                      help="list of input filenames")
     # cmdline.add_argument("--rerun", type=int, default=6,
@@ -1345,6 +1363,48 @@ if __name__ == "__main__":
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
                    dark_fn=args.dark_fn)
+
+        persistency_options = args.persistency_mode.split(":")
+        persistency_mode = persistency_options[0]
+        have_persistency_results = False
+        if (persistency_mode == "none"):
+            logger.info("Nothing to do")
+        elif (persistency_mode == "full"):
+            logger.info("Calculating persistency results for all pixels")
+            rss.fit_signal_with_persistency(previous_frame=None)
+            have_persistency_results = True
+        elif (persistency_mode == "best"):
+            logger.info("Using on-demand persistency fitting")
+            if(len(persistency_options) < 2):
+                logger.info("Insufficient information, defaulting to running on all pixels")
+                rss.fit_signal_with_persistency(previous_frame=None)
+                have_persistency_results = True
+            else:
+                opt = persistency_options[1]
+                if (os.path.isfile(opt)):
+                    logger.info("Using optimized persistency mode (ref-fn: %s)" % (opt))
+                    rss.fit_signal_with_persistency(previous_frame=opt)
+                    have_persistency_results = True
+                elif (os.path.isdir(opt)):
+                    logger.info("Searching for optimal reference frame in --> %s <--" % (opt))
+                    xxx = rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
+                    print(xxx)
+                    ref_fn, delta_t = xxx #rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
+                    if (ref_fn is not None):
+                        logger.info("Using optimized persistency mode using automatic ref-fn: %s (Dt=%.3f)" % (ref_fn, delta_t))
+                    else:
+                        logger.info("No previous frame found, defaulting to all pixels")
+                    rss.fit_signal_with_persistency(previous_frame=ref_fn)
+                    have_persistency_results = True
+                else:
+                    logger.info("Unknown option to best mode (found: %s), skipping persistency modeling" % (opt))
+        else:
+            logger.info("Unknown persistency request (%s)" % (persistency_mode))
+
+        if (have_persistency_results):
+            out_tmp = pyfits.PrimaryHDU(data=rss.persistency_fit_global)
+            out_tmp.writeto("%s.%s.persistencyfit.fits" % (rss.filebase, args.output_postfix), overwrite=True)
+
         rss.write_results(fn="%s.%s.fits" % (rss.filebase, args.output_postfix))
 
         # rss.plot_pixel_curve(818,1033)
