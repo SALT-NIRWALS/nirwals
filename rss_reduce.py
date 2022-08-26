@@ -1403,9 +1403,13 @@ if __name__ == "__main__":
 
         if (have_persistency_results):
             out_tmp = pyfits.PrimaryHDU(data=rss.persistency_fit_global)
-            out_tmp.writeto("%s.%s.persistencyfit.fits" % (rss.filebase, args.output_postfix), overwrite=True)
+            fit_fn = "%s.%s.persistencyfit.fits" % (rss.filebase, args.output_postfix)
+            logger.info("Writing persistency fit to %s ..." % (fit_fn))
+            out_tmp.writeto(fit_fn, overwrite=True)
 
-        rss.write_results(fn="%s.%s.fits" % (rss.filebase, args.output_postfix))
+        red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
+        logger.info("Writing reduction results to %s" % (red_fn))
+        rss.write_results(fn=red_fn)
 
         # rss.plot_pixel_curve(818,1033)
         # rss.plot_pixel_curve(1700,555)
