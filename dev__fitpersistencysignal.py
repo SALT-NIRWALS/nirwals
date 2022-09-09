@@ -40,6 +40,9 @@ if __name__ == "__main__":
                          help="use reference pixels [default: NO]")
     cmdline.add_argument("--previous", dest="previous_frame", type=str, default=None,
                          help="last frame of previous exposure")
+    cmdline.add_argument("--xy", dest="xy", default=None, type=str,
+                         help="Run on a single pixel only")
+
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -65,6 +68,34 @@ if __name__ == "__main__":
 
         # now that we have the dark-rate, apply the correction to the frame to estimate the noise
         # integ_exp_time = numpy.arange(rss.image_stack.shape[0]) * delta_exptime
+
+        if (args.xy is not None):
+            xy = [int(x) for x in args.xy.split(",")]
+            x = xy[0]
+            y = xy[1]
+
+            print("Working on a single pixel: x=%d y=%d" % (x,y))
+
+            ret = rss_reduce.persistency_fit_pixel(
+                differential_cube=rss.differential_cube,
+                linearized_cube=rss.linearized_cube,
+                read_times=rss.read_times,
+                x=x-1,
+                y=y-1,
+            )
+
+            bestfit, fit_uncert, good4fit = ret
+            print(bestfit)
+            print(fit_uncert)
+
+            rates = rss.differential_cube[:, y-1, x-1]
+            linear = rss.linearized_cube[:, y-1, x-1]
+            read_times = rss.read_times
+
+            numpy.savetxt("dummy_fit_singlepixel.dmp",
+                          numpy.array([read_times, rates, linear, good4fit]).T)
+
+            continue
 
         print(args.previous_frame)
         rss.fit_signal_with_persistency(previous_frame=args.previous_frame)
