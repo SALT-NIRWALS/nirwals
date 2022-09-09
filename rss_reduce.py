@@ -1386,6 +1386,8 @@ if __name__ == "__main__":
                          help="write intermediate process data [default: NO]")
     cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
                          help="use reference pixels [default: NO]")
+    cmdline.add_argument("--flat4salt", dest="write_flat_for_salt", default=False, action='store_true',
+                         help="write a flat, 1-extension FITS file for SALT")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
