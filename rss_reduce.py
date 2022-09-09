@@ -837,14 +837,45 @@ class RSS(object):
 
         return linearized_cube
 
-    def write_results(self, fn=None):
+
+    def write_results(self, fn=None, flat4salt=False):
         if (fn is None):
             fn = os.path.join(self.basedir, self.filebase) + ".reduced.fits"
-        hdulist = pyfits.HDUList([
-            pyfits.PrimaryHDU(), #header=self.primary_header)
-            pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
-            pyfits.ImageHDU(data=self.noise_image, name='NOISE')
-        ])
+
+        # collect all output results
+        _list = [pyfits.PrimaryHDU(header=self.ref_header)]
+        if (flat4salt):
+            # only write the reduced frame and nothing else
+            try:
+                img = self.persistency_fit_global[:, :, 0]
+                hdu = pyfits.ImageHDU(data=img, name="SCI")
+                hdr = hdu.header
+                hdr['FIT_PERS'] = (True, "true persistency results")
+            except:
+                img = self.weighted_mean
+                hdu = pyfits.ImageHDU(data=img, name="SCI")
+                hdr = hdu.header
+                hdr['FIT_PERS'] = (False, "true persistency results")
+            _list.append(hdu)
+        else:
+            _list.extend([
+                pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
+                pyfits.ImageHDU(data=self.noise_image, name='NOISE')
+            ])
+            try:
+                for i,extname in enumerate([
+                    'PERS.SIGNAL', 'PERS.AMP', 'PERS.TAU',
+                    'PERS.ERR.SIGNAL', 'PERS.ERR.AMP', 'PERS.ERR.TAU',
+                    'PERS.INTEGRATED', 'PERS.NSAMPLES']):
+                    _list.append(
+                        pyfits.ImageHDU(
+                            data=rss.persistency_fit_global[i, :, :],
+                            name=extname)
+                    )
+            except:
+                pass
+
+        hdulist = pyfits.HDUList(_list)
         self.logger.info("Writing reduced results to %s" % (fn))
         hdulist.writeto(fn, overwrite=True)
         return
@@ -1416,7 +1447,7 @@ if __name__ == "__main__":
 
         red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
         logger.info("Writing reduction results to %s" % (red_fn))
-        rss.write_results(fn=red_fn)
+        rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
 
         # rss.plot_pixel_curve(818,1033)
         # rss.plot_pixel_curve(1700,555)
