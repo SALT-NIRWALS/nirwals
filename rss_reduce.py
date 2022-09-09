@@ -368,8 +368,10 @@ class RSS(object):
 
             # mask all saturated pixels if requested
             if (mask_saturated_pixels):
-                print("masking out saturated pixels (%.1f)" % (self.saturation_level))
-                imgdata[imgdata > self.saturation_level] = numpy.Inf
+                saturation_mask = (imgdata > self.saturation_level)
+                print("masking out %d saturated pixels (%.1f)" % (
+                    numpy.sum(saturation_mask), self.saturation_level))
+                imgdata[saturation_mask] = numpy.Inf
 
             img_group = hdr['GROUP']
             img_read = hdr['READ']
