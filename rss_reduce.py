@@ -542,9 +542,10 @@ class RSS(object):
         self.logger.debug("differential cube allocated")
 
         self.logger.debug("calculating differential cube")
+        self.differential_read_times = numpy.pad(numpy.diff(self.read_times), (1,0))
         self.differential_cube[:, :, :] = numpy.pad(
             numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))
-        ) / self.read_times.reshape((-1,1,1))
+        ) / self.differential_read_times.reshape((-1,1,1))
         self.logger.debug("diff stack: %s" % (str(self.differential_cube.shape)))
 
         # mask out all saturated and/or otherwise bad samples
