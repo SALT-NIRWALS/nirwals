@@ -132,6 +132,40 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
     else:
         fit_uncert = numpy.array([-99, -99., -99.])  # print(fit[1])
 
+    special = False #(x>1025 & x<1050 & y>990 & y<1120)
+    if (write_test_plot or special):
+        fig = plt.figure()
+        fig.suptitle("x=%d    y=%d" % (x,y))
+
+        ax = fig.add_subplot(111)
+        ax.scatter(read_times[good4fit], rate_series[good4fit], marker='o')
+        ax.scatter(read_times[~good4fit], rate_series[~good4fit], marker='o', facecolors='none')
+        ax.set_xlabel("Integration time")
+        ax.set_ylabel("differential count")
+        ax.set_yscale('log')
+        # ax.set_xscale('log')
+        #ax.set_ylim((numpy.max([1, numpy.min(rate_series[good4fit])]), 1.8 * numpy.max(rate_series[good4fit])))
+        ystart = numpy.min([250, numpy.max([1, numpy.min(rate_series[good4fit])])])
+        # ystart = numpy.max([10, numpy.min(rate_series[good4fit])])
+        ax.set_ylim((ystart, 1.3 * numpy.max(rate_series[good4fit])))
+        ax.plot(read_times, _persistency_plus_signal_fit_fct(bestfit, read_times))
+
+        ax2 = ax.twinx()
+        ax2.set_ylabel("linearized read counts")
+        ax2.spines['right'].set_color('red')
+        # ax2.spines['left'].set_color('blue')
+        ax2.yaxis.label.set_color('red')
+        ax2.tick_params(axis='y', colors='red')
+        ax2.scatter(read_times[good4fit], linear_series[good4fit], c='red')
+        ax2.scatter(read_times[~good4fit], linear_series[~good4fit], c='red', facecolors='none')
+        ax2.axhline(y=62000, linestyle=":", color='red')
+
+        ax.set_title("S(t) = %.1f + %.1f * exp(-t/%.3f)" % (bestfit[0], bestfit[1], bestfit[2]))
+
+        plot_fn = "__debug_y=%04d_x=%04d.png" % (y,x)
+        fig.savefig(plot_fn, bbox_inches='tight')
+        plt.close(fig)
+
     return bestfit, fit_uncert, good4fit
 
 
@@ -140,7 +174,9 @@ def persistency_process_worker(
         shmem_differential_cube, shmem_linearized_cube, shmem_persistency_fit,
         read_times,
         n_frames, nx=2048, ny=2048,
-        name="Worker"):
+        name="Worker",
+        write_test_plots=False,
+    ):
 
     # make the shared memory available as numpy arrays
     linearized_cube = numpy.ndarray(
@@ -893,7 +929,12 @@ class RSS(object):
         self.persistency_fit_global[:,:,:] = numpy.NaN
         self.alloc_persistency = True
 
-    def fit_signal_with_persistency(self, n_workers=0, previous_frame=None):
+    def fit_signal_with_persistency(
+            self,
+            n_workers=0,
+            previous_frame=None,
+            write_test_plots=False
+    ):
 
         # by default use all existing CPU cores for processing
         if (n_workers <= 0):
@@ -931,7 +972,9 @@ class RSS(object):
                     read_times=self.read_times,
                     n_frames=self.linearized_cube.shape[0],
                     nx=self.nx, ny=self.ny,
-                    name="FitWorker_%02d" % (n+1)),
+                    name="FitWorker_%02d" % (n+1),
+                    write_test_plots=write_test_plots,
+                )
             )
             t.daemon = True
             fit_threads.append(t)
@@ -1384,6 +1427,8 @@ if __name__ == "__main__":
     #                      help="rerun")
     cmdline.add_argument("--dumps", dest="write_dumps", default=False, action='store_true',
                          help="write intermediate process data [default: NO]")
+    cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
+                         help="generate debug plots for all pixels with persistency [default: NO]")
     cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
                          help="use reference pixels [default: NO]")
     cmdline.add_argument("--flat4salt", dest="write_flat_for_salt", default=False, action='store_true',
@@ -1430,7 +1475,8 @@ if __name__ == "__main__":
                     ref_fn, delta_t = xxx #rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
                     if (ref_fn is not None):
                         logger.info("Using optimized persistency mode using automatic ref-fn: %s (Dt=%.3f)" % (ref_fn, delta_t))
-                        rss.fit_signal_with_persistency(previous_frame=ref_fn)
+                        rss.fit_signal_with_persistency(previous_frame=ref_fn,
+                                                        write_test_plots=args.write_debug_pngs)
                         have_persistency_results = True
                     else:
                         logger.warning("No previous frame found, skipping persistency fit")
