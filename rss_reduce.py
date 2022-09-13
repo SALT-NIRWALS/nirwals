@@ -117,18 +117,43 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
         return None,None,good4fit  # numpy.array(fallback_solution), numpy.array(fallback_uncertainty)  # assume perfect linearity
 
     # variables are: linear_rate, persistency_amplitude, persistency_timescale
-    pinit = [numpy.min(rate), 2 * numpy.max(rate), 3.5]
-    fit = scipy.optimize.leastsq(
-        func=_persistency_plus_signal_fit_err_fct, x0=pinit,
-        args=(read_time, rate, uncert),
-        full_output=1
+
+    # work out best initial guesses
+    # pinit = [numpy.min(rate), 2 * numpy.max(rate), 3.5]
+    # rate: minimum encountered, but minimum 0, max 60000
+    rate_guess = numpy.max([0., numpy.min([60000, numpy.nanmin(rate)])])
+    # persistency: max-rate minus best-guess for signal rate
+    pers_guess = numpy.max([0, numpy.min([60e3, (numpy.nanmax(rate) - rate_guess)])])
+    # tau: typical value found in data fits
+    tau_guess = 1.4
+    pinit = [rate_guess, pers_guess, tau_guess]
+
+    # boundary conditions for exponential fit parameters:
+    # signal:   -10 ... Inf counts/sec (small negative allowed for noise)
+    # persisntency amplite: 0 .. 65K counts/sec
+    # timescale tau: 0.2 .. 100 seconds
+    fit_results = scipy.optimize.least_squares(
+        fun=_persistency_plus_signal_fit_err_fct,
+        x0=pinit,
+        bounds=([-10, 0, 0.2], [numpy.Inf, 65e3, 100]),
+        kwargs=dict(read_time=read_time, rate=rate, uncert=uncert),
     )
-    # print(fit)
-    bestfit = fit[0]
+    bestfit = fit_results.x
+    bounds_limited_mask = fit_results.active_mask
+    fit_successful = fit_results.success
+
+    # fit = scipy.optimize.leastsq(
+    #     func=_persistency_plus_signal_fit_err_fct, x0=pinit,
+    #     args=(read_time, rate, uncert),
+    #     full_output=1
+    # )
+    # # print(fit)
+    # bestfit = fit[0]
 
     # Compute uncertainty on the shift and rotation
-    if (fit[1] is not None):
-        fit_uncert = numpy.sqrt(numpy.diag(fit[1]))
+    if (fit_successful):
+        # TODO: Figure out uncertainties here
+        fit_uncert = [0,0,0] #numpy.sqrt(numpy.diag(fit[1]))
     else:
         fit_uncert = numpy.array([-99, -99., -99.])  # print(fit[1])
 
