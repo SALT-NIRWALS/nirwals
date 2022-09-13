@@ -22,7 +22,6 @@ class DataProvenance( object ):
                 self.add("python-compiler", str(platform.python_compiler()))
                 self.add("python-build", str(platform.python_build()))
                 self.add("os-version", str(platform.platform()))
-
                 self.add("os-uname", " ".join(platform.uname()))
                 self.add("os-system", str(platform.system()))
                 self.add("os-node", str(platform.node()))
@@ -30,7 +29,6 @@ class DataProvenance( object ):
                 self.add("os-version", str(platform.version()))
                 self.add("os-machine", str(platform.machine()))
                 self.add("os-processor", str(platform.processor()))
-
                 self.add("interpreter", " ".join(platform.architecture()))
             except:
                 self.logger.debug("platform information not available for provenance")
