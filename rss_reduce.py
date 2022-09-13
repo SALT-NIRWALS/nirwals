@@ -90,7 +90,7 @@ def _persistency_plus_signal_fit_err_fct(p, read_time, rate, uncert):
 
 
 n_persistency_values = 8
-def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y):
+def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, write_test_plot=False):
 
     rate_series = differential_cube[:, y, x]
     linear_series = linearized_cube[:, y, x]
@@ -242,6 +242,7 @@ def persistency_process_worker(
                     linearized_cube=linearized_cube,
                     read_times=read_times,
                     x=x, y=row,
+                    write_test_plot=write_test_plots,
                 )
                 best_fit, fit_uncertainties, good4fit = results
                 if (best_fit is not None):
