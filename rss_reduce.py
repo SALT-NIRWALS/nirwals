@@ -31,6 +31,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import rss_filepicker
+import provenance
 
 import astropy
 print(astropy.__path__)
@@ -333,6 +334,11 @@ class RSS(object):
         self.saturation_percentile = saturation_percentile
         self.mask_saturated_pixels = mask_saturated_pixels
 
+        self.provenance = provenance.DataProvenance(
+            logger=self.logger,
+            track_machine_data=True
+        )
+
         self.read_exposure_setup()
 
         self.get_full_filelist()
@@ -344,6 +350,7 @@ class RSS(object):
         # read the input file as reference file
         self.ref_hdulist = pyfits.open(self.fn)
         self.ref_header = self.ref_hdulist[0].header
+        self.provenance.add("ref-header", self.fn)
 
         # image dimensions
         self.nx = self.ref_header['XSTOP'] - self.ref_header['XSTART'] + 1
@@ -426,6 +433,7 @@ class RSS(object):
             hdulist = pyfits.open(fn)
             hdr = hdulist[0].header
             imgdata = hdulist[0].data.astype(numpy.float32)
+            self.provenance.add("input", fn)
             # hdulist.info()
 
             # mask all saturated pixels if requested
@@ -543,6 +551,7 @@ class RSS(object):
                 self.logger.info("Loading dark-corrections from %s" % (dark_fn))
                 dark_hdu = pyfits.open(dark_fn)
                 dark = dark_hdu['DARKRATE'].data
+                self.provenance.add("dark", dark_fn)
 
                 # perform a dark subtraction;
                 # dark-current = rate [in cts/sec] * frame-# * exposure-time per frame [in sec]
@@ -978,6 +987,8 @@ class RSS(object):
             self.logger.info("Using previous frame (%s) to speed up persistency correction" % (previous_frame))
             prev_hdu = pyfits.open(previous_frame)
             prev_img = prev_hdu[0].data
+            self.provenance.add("persistency-reference", previous_frame)
+
             threshold = 58000
             need_full_persistency_fit = prev_img > threshold
             for y in numpy.arange(self.ny):
@@ -1523,6 +1534,8 @@ if __name__ == "__main__":
         red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
         logger.info("Writing reduction results to %s" % (red_fn))
         rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
+
+        rss.provenance.report()
 
         # rss.plot_pixel_curve(818,1033)
         # rss.plot_pixel_curve(1700,555)
