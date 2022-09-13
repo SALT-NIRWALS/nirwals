@@ -393,7 +393,7 @@ class RSS(object):
     #     self.n_groups = hdr['NGROUPS']
     #     self.diff_exptime = self.exptime / self.n_groups
 
-    def load_all_files(self, max_number_files=None, mask_saturated_pixels=False):
+    def load_all_files(self, max_number_files=None, mask_saturated_pixels=True):
 
         if (max_number_files is None):
             max_number_files = self.max_number_files
@@ -429,9 +429,9 @@ class RSS(object):
             # hdulist.info()
 
             # mask all saturated pixels if requested
-            if (mask_saturated_pixels):
+            if (mask_saturated_pixels or True):
                 saturation_mask = (imgdata > self.saturation_level)
-                print("masking out %d saturated pixels (%.1f)" % (
+                self.logger.info("masking out %d saturated pixels (%.1f)" % (
                     numpy.sum(saturation_mask), self.saturation_level))
                 imgdata[saturation_mask] = numpy.Inf
 
