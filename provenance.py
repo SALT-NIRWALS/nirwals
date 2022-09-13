@@ -1,6 +1,9 @@
+#!/usr/bin/env python3
+
 
 import logging
 import os
+import sys
 
 import astropy.io.fits as pyfits
 
@@ -67,13 +70,34 @@ class DataProvenance( object ):
 
         return
 
+    def get(self, record):
+        if (record in self.inventory):
+            return self.inventory[record]
+        return None
 
     def write_to_header(self, hdr):
         return
 
 
     def write_as_hdu(self):
-        return
+
+        _keys = []
+        _values = []
+        for key, values in self.inventory.items():
+            for v in values:
+                _keys.append(key)
+                _values.append(v)
+
+        columns = [
+            pyfits.Column(name="record", format="A40", array=_keys),
+            pyfits.Column(name="value", format="A400", array=_values),
+        ]
+        coldefs = pyfits.ColDefs(columns)
+
+        tbhdu = pyfits.BinTableHDU.from_columns(coldefs)
+        tbhdu.name = "PROVENANCE"
+
+        return tbhdu
 
     def report(self):
         print("\n ==== DATA PROVENANCE INVENTORY ==== ")
@@ -83,3 +107,23 @@ class DataProvenance( object ):
         print(" ==== DATA PROVENANCE INVENTORY END ==== ")
         return
 
+
+    def read_from_fits(self, filename, extname='PROVENANCE'):
+        hdulist = pyfits.open(filename)
+
+        tbhdu = hdulist[extname]
+        _records = tbhdu.data.field("record")
+        _values = tbhdu.data.field("value")
+
+        for rec,val in zip(_records, _values):
+            self.add(rec, val)
+
+        hdulist.close()
+
+
+if __name__ == "__main__":
+
+    fn = sys.argv[1]
+    prov = DataProvenance()
+    prov.read_from_fits(fn)
+    prov.report()
