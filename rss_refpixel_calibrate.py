@@ -7,7 +7,12 @@ import numpy
 
 import matplotlib.pyplot as plt
 
+dummycounter = 0
+
 def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False):
+
+    global dummycounter
+    dummycounter += 1
 
     # first, combine left & right to subtract row-wise overscan level
     _left = numpy.mean(data[:, edge:4], axis=1).reshape((-1,1))
@@ -21,7 +26,7 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
 
     data_rowsub = data - row_wise
     if (debug):
-        pyfits.PrimaryHDU(data=data_rowsub).writeto("del__rowsub.fits", overwrite=True)
+        pyfits.PrimaryHDU(data=data_rowsub).writeto("del__rowsub_%d.fits" % (dummycounter), overwrite=True)
 
     # now figure out the column situation
     top = data_rowsub[edge:4, :]
