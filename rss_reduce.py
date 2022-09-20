@@ -999,6 +999,8 @@ class RSS(object):
             except:
                 pass
 
+        _list.append(self.provenance.write_as_hdu())
+
         hdulist = pyfits.HDUList(_list)
         self.logger.info("Writing reduced results to %s" % (fn))
         hdulist.writeto(fn, overwrite=True)
