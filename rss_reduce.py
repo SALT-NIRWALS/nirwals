@@ -530,20 +530,26 @@ class RSS(object):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
 
+        # pyfits.PrimaryHDU(data=self.image_stack).writeto("raw_stack_dmp.fits", overwrite=True)
+
+        self.reference_corrections_cube = numpy.full_like(self.image_stack, fill_value=0.)
+
+        reset_frame_subtracted = self.image_stack.copy()
         if (self.use_reference_pixels):
             self.logger.info("Applying reference pixel corrections")
-            reset_frame_subtracted = self.image_stack.copy()
             for frame_id in range(self.image_stack.shape[0]):
                 reference_pixel_correction = rss_refpixel_calibrate.reference_pixels_to_background_correction(
-                    self.image_stack[frame_id]
+                    self.image_stack[frame_id], debug=False,
                 )
+                self.reference_corrections_cube[frame_id] = reference_pixel_correction
                 reset_frame_subtracted[frame_id] -= reference_pixel_correction
         else:
             self.logger.info("Subtracting first read from stack")
             # self.subtract_first_read()
             # apply first-read subtraction
             self.reset_frame = self.image_stack[0]
-            reset_frame_subtracted = self.image_stack - self.reset_frame
+            self.reference_corrections_cube[:] = self.reset_frame.reshape((-1, self.ny, self.nx))
+            # reset_frame_subtracted = self.image_stack - self.reset_frame
 
         # apply any necessary corrections for nonlinearity and other things
         self.logger.info("Applying non-linearity corrections")
@@ -657,7 +663,8 @@ class RSS(object):
             bn = self.filebase + "__"
             self.logger.debug("Dump-file basename: %s" % (bn))
             pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_raw.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_zerosub.fits", overwrite=True)
+            pyfits.PrimaryHDU(data=self.reference_corrections_cube).writeto(bn+"stack_referencecorrection.fits", overwrite=True)
+            # pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_zerosub.fits", overwrite=True)
             pyfits.PrimaryHDU(data=linearized).writeto(bn+"stack_linearized.fits", overwrite=True)
             self.logger.debug("writing darkcube")
             pyfits.PrimaryHDU(data=dark_cube).writeto(bn+"stack_darkcube.fits", overwrite=True)
@@ -827,7 +834,7 @@ class RSS(object):
 
                 # flag bad/saturated pixels
                 max_diff = numpy.nanpercentile(diffs, 90)
-                bad = (raw_series > 63000) | (diffs < 0.3 * max_diff)
+                bad = (raw_series > 63000) | (diffs < 0.3 * max_diff)  | ~numpy.isfinite(raw_series)
 
                 n_good = numpy.sum(~bad)
                 if (n_good < 5):
