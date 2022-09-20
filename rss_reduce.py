@@ -571,6 +571,20 @@ class RSS(object):
         self.linearized_cube[:,:,:] = linearized[:,:,:]
         self.logger.debug("linearized cube initialized")
 
+        # also initialize a 16-bit mask frame to hold some more info about the data results
+        self.logger.debug("Allocating memory for the output mask frame")
+        mask_dtype = numpy.int16
+        _mask = numpy.zeros((self.ny, self.nx), dtype=mask_dtype)
+        self.shmem_image_mask = multiprocessing.shared_memory.SharedMemory(
+            create=True, size=_mask.nbytes
+        )
+        self.image_mask = numpy.ndarray(
+            shape=(self.ny, self.nx), dtype=mask_dtype,
+            buffer=self.shmem_image_mask.buf
+        )
+        self.image_mask[:,:] = 0
+
+
         dark_cube = numpy.zeros_like(linearized)
         if (dark_fn is None):
             self.logger.warning("No dark correction requested, skipping")
