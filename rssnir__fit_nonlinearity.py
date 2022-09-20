@@ -8,7 +8,14 @@ import rss_reduce
 if __name__ == "__main__":
 
     fn = sys.argv[1]
-    rss = rss_reduce.RSS(fn)
+
+    try:
+        saturation_fn = sys.argv[2]
+    except:
+        saturation_fn = 62000
+
+    rss = rss_reduce.RSS(fn, saturation=saturation_fn)
+
     # rss.reduce(write_dumps=False)
     # rss.write_results()
 
