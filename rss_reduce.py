@@ -924,17 +924,23 @@ class RSS(object):
 
     def read_nonlinearity_corrections(self, nonlin_fn):
 
+        self.logger.debug("Reading non-linearity: %s (file exists: %s)" % (
+            nonlin_fn, os.path.isfile(nonlin_fn)))
         if (os.path.isfile(nonlin_fn)):
             try:
-                hdulist = pyfits.open(nonlin_fn)
                 self.logger.info("Reading nonlinearity corrections from %s" % (nonlin_fn))
+                hdulist = pyfits.open(nonlin_fn)
+                # hdulist.info()
                 nonlinearity_cube = hdulist[0].data
-                self.logger.debug("CORR shape: %s" % (nonlinearity_cube.shape))
-            except:
+                self.logger.debug("CORR shape: %s" % (str(nonlinearity_cube.shape)))
+            except Exception as e:
+                self.logger.error(str(e))
                 return False
 
+        self.provenance.add("nonlinearity", nonlin_fn)
         self.nonlin_fn = nonlin_fn
         self.nonlinearity_cube = nonlinearity_cube
+
 
     def apply_nonlinearity_corrections(self, img_cube=None):
 
@@ -1532,9 +1538,11 @@ if __name__ == "__main__":
                   )
 
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
+            logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
-                   dark_fn=args.dark_fn)
+                   dark_fn=args.dark_fn,
+                   )
 
         persistency_options = args.persistency_mode.split(":")
         persistency_mode = persistency_options[0]
