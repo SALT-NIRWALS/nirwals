@@ -306,6 +306,7 @@ class RSS(object):
     mask_NEGATIVE = 0x0008
 
     def __init__(self, fn, max_number_files=-1,
+                 saturation=None,
                  saturation_level=62000,
                  saturation_fraction=0.25, saturation_percentile=95,
                  use_reference_pixels=True,
@@ -321,6 +322,7 @@ class RSS(object):
         self.first_read_subtracted = False
         self.first_read = None
         self.first_header = None
+        self.saturation_frame = None
 
         self.nonlin_fn = None
         self.nonlinearity_cube = None
@@ -338,6 +340,24 @@ class RSS(object):
             logger=self.logger,
             track_machine_data=True
         )
+
+        if (saturation is not None):
+            if (os.path.isfile(saturation)):
+                self.saturation_frame = saturation
+                self.logger.info("Reading pixel-by-pixe saturation limits from %s" % (self.saturation_frame))
+                sat_hdu = pyfits.open(saturation)
+                self.saturation_level = sat_hdu[0].data
+                self.logger.info("saturation limits shape: %s" % (str(self.saturation_level.shape)))
+                self.provenance.add("saturation-level", saturation)
+            else:
+                try:
+                    _sat = float(saturation)
+                    self.saturation_level = _sat
+                    self.provenance.add("saturation-level", _sat)
+                except:
+                    pass
+        else:
+            self.provenance.add("saturation-level", self.saturation_level)
 
         self.read_exposure_setup()
 
@@ -1458,6 +1478,8 @@ if __name__ == "__main__":
 
     cmdline.add_argument("--persistency", dest="persistency_mode", type=str, default="quick",
                          help="persistency mode")
+    cmdline.add_argument("--saturation", dest="saturation", default=62000,
+                         help="saturation value/file")
 
     # cmdline.add_argument("healpix32", nargs="+", type=int,
     #                      help="list of input filenames")
@@ -1479,7 +1501,10 @@ if __name__ == "__main__":
         # fn = sys.argv[1]
 
         rss = RSS(fn, max_number_files=args.max_number_files,
-                   use_reference_pixels=args.use_ref_pixels)
+                  use_reference_pixels=args.use_ref_pixels,
+                  saturation=args.saturation,
+                  )
+
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
