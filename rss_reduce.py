@@ -453,15 +453,8 @@ class RSS(object):
             hdulist = pyfits.open(fn)
             hdr = hdulist[0].header
             imgdata = hdulist[0].data.astype(numpy.float32)
-            self.provenance.add("input", fn)
-            # hdulist.info()
 
-            # mask all saturated pixels if requested
-            if (mask_saturated_pixels or True):
-                saturation_mask = (imgdata > self.saturation_level)
-                self.logger.info("masking out %d saturated pixels (%.1f)" % (
-                    numpy.sum(saturation_mask), self.saturation_level))
-                imgdata[saturation_mask] = numpy.Inf
+            # hdulist.info()
 
             img_group = hdr['GROUP']
             img_read = hdr['READ']
@@ -471,6 +464,18 @@ class RSS(object):
             if (max_number_files > 0 and img_group >= max_number_files):
                 self.logger.debug("img-group > max-number-file --> skipping this file")
                 continue
+
+            # track input files for provenance
+            self.provenance.add("input", fn)
+
+            # mask all saturated pixels if requested
+            if (mask_saturated_pixels or True):
+                saturation_mask = (imgdata > self.saturation_level) & \
+                                  numpy.isfinite(self.saturation_level)
+                self.logger.info("masking out %d saturated pixels" % (
+                    numpy.sum(saturation_mask)))
+                imgdata[saturation_mask] = numpy.Inf
+
 
             self.raw_read_times[img_read-1, img_group-1] = img_exptime
             self.logger.debug("raw read times: %s" % (str(self.raw_read_times)))
