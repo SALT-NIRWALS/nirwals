@@ -478,6 +478,11 @@ class RSS(object):
             if (mask_saturated_pixels or True):
                 saturation_mask = (imgdata > self.saturation_level) & \
                                   numpy.isfinite(self.saturation_level)
+                # no matter what, NEVER mask out reference pixels, otherwise bad things may happen
+                saturation_mask[  :  ,   :4] = False # left
+                saturation_mask[  :  , -4: ] = False # right
+                saturation_mask[  :4 ,   : ] = False # top
+                saturation_mask[-4:  ,   : ] = False # bottom
                 self.logger.info("masking out %d saturated pixels" % (
                     numpy.sum(saturation_mask)))
                 imgdata[saturation_mask] = numpy.Inf
