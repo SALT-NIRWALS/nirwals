@@ -133,15 +133,21 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
     # signal:   -10 ... Inf counts/sec (small negative allowed for noise)
     # persisntency amplite: 0 .. 65K counts/sec
     # timescale tau: 0.2 .. 100 seconds
-    fit_results = scipy.optimize.least_squares(
-        fun=_persistency_plus_signal_fit_err_fct,
-        x0=pinit,
-        bounds=([-10, 0, 0.2], [numpy.Inf, 65e3, 100]),
-        kwargs=dict(read_time=read_time, rate=rate, uncert=uncert),
-    )
-    bestfit = fit_results.x
-    bounds_limited_mask = fit_results.active_mask
-    fit_successful = fit_results.success
+    try:
+        fit_results = scipy.optimize.least_squares(
+            fun=_persistency_plus_signal_fit_err_fct,
+            x0=pinit,
+            bounds=([-10, 0, 0.2], [numpy.Inf, 65e3, 100]),
+            kwargs=dict(read_time=read_time, rate=rate, uncert=uncert),
+        )
+        bestfit = fit_results.x
+        bounds_limited_mask = fit_results.active_mask
+        fit_successful = fit_results.success
+    except ValueError as e:
+        bestfit = [numpy.NaN,numpy.NaN,numpy.NaN]
+        bounds_limited_mask = False
+        fit_successful = False
+
 
     # fit = scipy.optimize.leastsq(
     #     func=_persistency_plus_signal_fit_err_fct, x0=pinit,
