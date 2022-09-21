@@ -102,7 +102,7 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
     good4fit = numpy.isfinite(read_times) & \
                numpy.isfinite(rate_series) & \
                numpy.isfinite(uncertainties) & \
-               (linear_series < 62000)
+               (linear_series < 55000)
 
     read_time = read_times[good4fit]
     rate = rate_series[good4fit]
