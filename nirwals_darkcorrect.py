@@ -31,6 +31,9 @@ if __name__ == "__main__":
     cmdline.add_argument("--dumpscaling", dest="dump_scaling",
                          default=False, action='store_true',
                          help="scaling factor")
+    cmdline.add_argument("--fillbad", dest="fill_bad",
+                         default=None, type=float,
+                         help="fill bad pixels with fixed value")
 
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
@@ -56,6 +59,9 @@ if __name__ == "__main__":
             continue
 
         corrected = pers_signal - dark
+        if (args.fill_bad is not None):
+            fill = ~numpy.isfinite(corrected) | (pers_signal < -9)
+            corrected[fill] = args.fill_bad
 
         dir,bn = os.path.split(in_fn)
         bn_ext,ext = os.path.splitext(bn)
