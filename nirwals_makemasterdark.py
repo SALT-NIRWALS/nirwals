@@ -22,6 +22,10 @@ if __name__ == "__main__":
             print("Unable to find PERS.SIGNAL in %s" % (fn))
             continue
 
+        # mask out bad pixels
+        bad_pixels = (pers_signal < -9)
+        pers_signal[bad_pixels] = numpy.NaN
+
         dark_stack.append(pers_signal)
 
     dark_stack = numpy.array(dark_stack)
