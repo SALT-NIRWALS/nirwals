@@ -4,7 +4,7 @@ import os
 import sys
 import astropy.io.fits as pyfits
 import logging
-import multiparallel_logging as mplog
+import multiparlog as mplog
 
 # from rss_reduce import find_previous_frame
 import rss_filepicker

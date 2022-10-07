@@ -9,7 +9,7 @@ import scipy.optimize
 import matplotlib.pyplot as plt
 import time
 
-import multiparallel_logging as mplog
+import multiparlog as mplog
 import logging
 
 import astropy.io.fits as pyfits

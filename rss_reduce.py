@@ -12,7 +12,7 @@ import time
 import glob
 import datetime
 
-import multiparallel_logging as mplog
+import multiparlog as mplog
 
 import numpy
 import astropy.io.fits as pyfits

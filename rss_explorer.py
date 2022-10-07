@@ -21,7 +21,7 @@ import queue
 import pyds9
 import multiprocessing
 
-import multiparallel_logging as mplog
+import multiparlog as mplog
 import logging
 
 

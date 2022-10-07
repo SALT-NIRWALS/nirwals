@@ -9,7 +9,7 @@ import argparse
 
 import astropy.io.fits as pyfits
 
-import multiparallel_logging as mplog
+import multiparlog as mplog
 
 if __name__ == "__main__":
 
