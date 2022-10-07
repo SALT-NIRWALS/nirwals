@@ -537,6 +537,64 @@ class RSS(object):
 
         self.image_stack_initialized = True
 
+    def apply_dark_correction(self, dark_fn, dark_mode="differential"):
+
+        self.dark_cube = numpy.zeros_like(self.linearized_cube)
+        if (dark_fn is None):
+            self.logger.warning("No dark correction requested, skipping")
+            return
+        elif (not os.path.isfile(dark_fn)):
+            self.logger.warning("Dark requested (%s) but not found" % (dark_fn))
+            return
+        else:
+            try:
+                # load dark-rate image
+                self.logger.info("Loading dark-corrections from %s" % (dark_fn))
+                dark_hdu = pyfits.open(dark_fn)
+                dark = dark_hdu[0].data
+                self.provenance.add("dark", dark_fn)
+            except Exception as e:
+                self.logger.error("error during dark subtraction:\n%s" % (str(e)))
+                return
+
+        if (dark_mode == "linearized"):
+            # TODO: CHECK THAT THIS IS CORRECT
+            # perform a dark subtraction;
+            # dark-current = rate [in cts/sec] * frame-# * exposure-time per frame [in sec]
+            self.dark_cube = (numpy.arange(linearized.shape[0], dtype=numpy.float).reshape((-1, 1, 1)) + 1) \
+                        * self.diff_exptime \
+                        * dark.reshape((1, dark.shape[0], dark.shape[1]))
+            self.logger.debug("shape of dark cube: %s" % (self.dark_cube.shape))
+            self.linearized_cube -= self.dark_cube
+
+        elif (dark_mode == "differential"):
+            if (dark.shape[0] == self.differential_cube.shape[0]):
+                # dimensions match, nothing to do
+                dark_correction = dark
+            elif (dark.shape[0] > self.differential_cube.shape[0]):
+                # we have more dark data then is needed
+                dark_correction = dark[:self.differential_cube.shape[0]]
+            else:
+                # we don't have enough data - that's bad, so let's try to extrapolate the rest
+                n_missing = self.differential_cube.shape[0] - dark.shape[0]
+                dark_correction = numpy.pad(dark, pad_width=((0,n_missing), (0,0), (0,0)), mode='edge')
+
+            # for bad data do not apply any corrections (better safe than sorry)
+            dark_correction[~numpy.isfinite(dark_correction)] = 0.
+
+            self.logger.info("Applying differential dark correction (shape: %s)" % (str(dark_correction.shape)))
+            # pyfits.PrimaryHDU(data=dark_correction).writeto("deleteme__darkcorr.fits", overwrite=True)
+            print(self.differential_cube.shape, dark_correction.shape)
+            # pyfits.PrimaryHDU(data=self.differential_cube).writeto("darkcorrect_before.fits", overwrite=True)
+            self.differential_cube[:,:,] = self.differential_cube[:,:,:] - dark_correction[:,:,:] # * 1e-6)
+            # pyfits.PrimaryHDU(data=self.differential_cube).writeto("darkcorrect_after.fits", overwrite=True)
+
+        return
+
+
+
+
+
     def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None, mask_saturated_pixels=False):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
@@ -595,29 +653,8 @@ class RSS(object):
         )
         self.image_mask[:,:] = 0
 
-
-        dark_cube = numpy.zeros_like(linearized)
-        if (dark_fn is None):
-            self.logger.warning("No dark correction requested, skipping")
-        elif (not os.path.isfile(dark_fn)):
-            self.logger.warning("Dark requested (%s) but not found" % (dark_fn))
-        else:
-            try:
-                # load dark-rate image
-                self.logger.info("Loading dark-corrections from %s" % (dark_fn))
-                dark_hdu = pyfits.open(dark_fn)
-                dark = dark_hdu['DARKRATE'].data
-                self.provenance.add("dark", dark_fn)
-
-                # perform a dark subtraction;
-                # dark-current = rate [in cts/sec] * frame-# * exposure-time per frame [in sec]
-                dark_cube = (numpy.arange(linearized.shape[0], dtype=numpy.float).reshape((-1,1,1)) + 1) \
-                            * self.diff_exptime \
-                            * dark.reshape((1, dark.shape[0], dark.shape[1]))
-                self.logger.debug("shape of dark cube: %s" % (dark_cube.shape))
-                self.linearized_cube -= dark_cube
-            except Exception as e:
-                self.logger.error("error during dark subtraction:\n%s" % (str(e)))
+        # TODO: Add flexibility to have darks either in linear or differential mode
+        # for now let's simplify things and assume differential mode only
 
         # allocate shared memory for the differential stack and calculate from
         # the linearized cube
@@ -639,6 +676,9 @@ class RSS(object):
         ) / self.differential_read_times.reshape((-1,1,1))
         self.logger.debug("diff stack: %s" % (str(self.differential_cube.shape)))
 
+        self.logger.info("Next up (maybe): dark correction")
+        self.apply_dark_correction(dark_fn)
+
         # mask out all saturated and/or otherwise bad samples
         max_count_rates = -1000 # TODO: FIX THIS numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
         # print("max counrates:", max_count_rates.shape)
@@ -652,9 +692,9 @@ class RSS(object):
             bad_data = bad_data | (self.image_stack > self.saturation_level)
         if (mask_bad_data is not None and (mask_bad_data & self.mask_LOW_RATE) > 0):
             bad_data = bad_data | (self.differential_cube < self.saturation_fraction * max_count_rates)
-        if (mask_bad_data is not None and (mask_bad_data & self.mask_BAD_DARK) > 0):
-            bad_data = bad_data | (dark_cube >= linearized)
-        if (mask_bad_data is not None and (mask_bad_data & self.mask_NEGATIVE) > 0):
+        # if (mask_bad_data is not None and (mask_bad_data & self.mask_BAD_DARK) > 0):
+        #     bad_data = bad_data | (self.dark_cube >= linearized)
+        # if (mask_bad_data is not None and (mask_bad_data & self.mask_NEGATIVE) > 0):
             bad_data = bad_data | (linearized < 0)
 
         self.bad_data_mask = bad_data
