@@ -609,9 +609,27 @@ class RSS(object):
 
 
 
-    def dump_data(self, data, fn, datatype="?_default_?"):
+    def dump_data(self, data, fn, datatype="?_default_?", extname=None):
         self.logger.debug("Writing %s to %s" % (datatype, fn))
-        pyfits.PrimaryHDU(data=data).writeto(fn, overwrite=True)
+
+        # all output gets reference header information
+        _ext = [pyfits.PrimaryHDU(header=self.ref_header)]
+
+        # add one or all image datasets
+        if (type(data) == list):
+            for (extname, d) in data:
+                _ext.append(pyfits.ImageHDU(data=d, name=extname))
+        else:
+            _ext.append(pyfits.ImageHDU(data=data, name=extname))
+
+        # add exposure time list
+
+        # add data provenance, just in case
+
+        # now write results
+        hdulist = pyfits.HDUList(_ext)
+        hdulist.writeto(fn, overwrite=True)
+
         return
 
 
