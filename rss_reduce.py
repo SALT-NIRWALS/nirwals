@@ -304,6 +304,22 @@ darktype_COLD = 1
 darktype_WARM = 2
 darktype_HOT = 3
 
+dump_options = [
+    'rawstack',
+    'zerosubstack',
+    'linearstack',
+    'diffstack',
+    'cleanstack',
+    'darkstack',
+    'plain',
+    'badmask',
+    'weighted',
+    'noise',
+    'all',
+    'fordark',
+    'ngoodpixels',
+]
+
 class RSS(object):
 
     mask_SATURATED = 0x0001
@@ -320,7 +336,6 @@ class RSS(object):
 
         self.fn = fn
         self.filelist = []
-
         self.logger = logging.getLogger("RSS")
 
         self.use_reference_pixels = use_reference_pixels
@@ -594,6 +609,11 @@ class RSS(object):
 
 
 
+    def dump_data(self, data, fn, datatype="?_default_?"):
+        self.logger.debug("Writing %s to %s" % (datatype, fn))
+        pyfits.PrimaryHDU(data=data).writeto(fn, overwrite=True)
+        return
+
 
     def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None, mask_saturated_pixels=False):
 
@@ -727,25 +747,47 @@ class RSS(object):
             self.logger.info("Writing all dumps")
             bn = self.filebase + "__"
             self.logger.debug("Dump-file basename: %s" % (bn))
-            pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_raw.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.reference_corrections_cube).writeto(bn+"stack_referencecorrection.fits", overwrite=True)
-            # pyfits.PrimaryHDU(data=self.image_stack).writeto(bn+"stack_zerosub.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=linearized).writeto(bn+"stack_linearized.fits", overwrite=True)
-            self.logger.debug("writing darkcube")
-            pyfits.PrimaryHDU(data=dark_cube).writeto(bn+"stack_darkcube.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.differential_cube).writeto(bn + "stack_diff.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.clean_stack).writeto(bn+"stack_clean.fits", overwrite=True)
+            if ('rawstack' in write_dumps):
+                self.dump_data(self.image_stack, bn+"stack_raw.fits", "rawstack")
+            if ("zerosubstack" in write_dumps):
+                self.dump_data(data=self.image_stack,
+                               fn=bn+"stack_zerosub.fits",
+                               datatype='zerosubstack')
+            if ('linearstack' in write_dumps or 'fordark' in write_dumps):
+                self.dump_data(data=linearized,
+                               fn=bn+"stack_linearized.fits",
+                               datatype='linearstack')
+            if ('darkstack' in write_dumps):
+                self.dump_data(data=dark_cube,
+                               fn=bn+"stack_darkcube.fits",
+                               datatype='darkstack')
+            if ('diffstack' in write_dumps or 'fordark' in write_dumps):
+                self.dump_data(data=self.differential_cube,
+                               fn=bn + "stack_diff.fits",
+                               datatype='diffstack')
+            if ('cleanstack' in write_dumps):
+                self.dump_data(data=self.clean_stack,
+                               fn=bn+"stack_clean.fits",
+                               datatype='cleanstack')
             # pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
             # pyfits.PrimaryHDU(data=self.reduced_image_plain).writeto("final_image.fits", overwrite=True)
             # pyfits.PrimaryHDU(data=image7).writeto("final_image7.fits", overwrite=True)
             # pyfits.PrimaryHDU(data=max_count_rates).writeto("max_count_rates.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=bad_data.astype(numpy.int)).writeto(bn+"bad_data.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.weighted_mean).writeto(bn+"final_image_weighted.fits", overwrite=True)
-            pyfits.PrimaryHDU(data=self.inv_noise).writeto(bn+"final_inv_noise.fits", overwrite=True)
+            # pyfits.PrimaryHDU(data=bad_data.astype(numpy.int)).writeto(bn+"bad_data.fits", overwrite=True)
+            if ('weighted' in write_dumps):
+                self.dump_data(data=self.weighted_mean,
+                               fn=bn+"final_image_weighted.fits",
+                               datatype='weighted')
+            if ('noise' in write_dumps):
+                self.dump_data(data=self.inv_noise,
+                               fn=bn+"final_inv_noise.fits",
+                               datatype='noise')
 
-            n_good_pixels = numpy.sum(~bad_data, axis=0)
-            print("#goodpixels", n_good_pixels.shape)
-            pyfits.PrimaryHDU(data=n_good_pixels).writeto(bn+"n_good_pixels.fits", overwrite=True)
+            if ('ngoodpixels' in write_dumps):
+                n_good_pixels = numpy.sum(~bad_data, axis=0)
+                print("#goodpixels", n_good_pixels.shape)
+                self.dump_data(data=n_good_pixels,
+                               fn=bn+"n_good_pixels.fits", overwrite=True)
 
         return
 
@@ -1570,7 +1612,7 @@ if __name__ == "__main__":
     #                      help="list of input filenames")
     # cmdline.add_argument("--rerun", type=int, default=6,
     #                      help="rerun")
-    cmdline.add_argument("--dumps", dest="write_dumps", default=False, action='store_true',
+    cmdline.add_argument("--dumps", dest="write_dumps", default=None,
                          help="write intermediate process data [default: NO]")
     cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
                          help="generate debug plots for all pixels with persistency [default: NO]")
@@ -1581,6 +1623,12 @@ if __name__ == "__main__":
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
+
+    dumpfiles = []
+    if (args.write_dumps is not None):
+        for di in [x.lower() for x in args.write_dumps.split(",")]:
+            if (di in dump_options):
+                dumpfiles.append(di)
 
     for fn in args.files:
         # fn = sys.argv[1]
@@ -1593,7 +1641,7 @@ if __name__ == "__main__":
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
-        rss.reduce(write_dumps=args.write_dumps,
+        rss.reduce(write_dumps=dumpfiles,
                    dark_fn=args.dark_fn,
                    )
 
