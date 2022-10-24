@@ -242,6 +242,14 @@ def persistency_process_worker(
             #     x=x, y=row, debug=False, plot=False
             # )
 
+            good_pixel_result = False
+
+            diff_reads = differential_cube[:, row, x]
+            raw_reads = linearized_cube[:, row, x]
+            good_data = (raw_reads > 0) & (raw_reads < 62000)
+            unsaturated = (raw_reads > 0) & (raw_reads < 62000)
+            n_unsaturated = numpy.sum(unsaturated)
+
             if (full_fit_mask[x]):
                 # do a full fit for this pixel
                 results = persistency_fit_pixel(
@@ -260,14 +268,12 @@ def persistency_process_worker(
                         best_fit[1] * best_fit[2] * (
                         numpy.exp(-read_times[1]/best_fit[2]) - numpy.exp(-numpy.nanmax(read_times)/best_fit[2]))
                     linebuffer[6, x] = integrated_persistency
+                    good_pixel_result = True
 
                 linebuffer[7, x] = numpy.sum(good4fit)
 
-            else:
+            elif (n_unsaturated > 5):
                 # no need for a full fit, just calculate a simple slope
-                diff_reads = differential_cube[:, row, x]
-                raw_reads = linearized_cube[:, row, x]
-                good_data = (raw_reads > 0) & (raw_reads < 62000)
                 #print(diff_reads.shape)
 
                 _median, _sigma = numpy.NaN, numpy.NaN
@@ -285,15 +291,22 @@ def persistency_process_worker(
                 linebuffer[0,x] = _median
                 linebuffer[3,x] = _sigma
                 linebuffer[7,x] = numpy.sum(good_data)
+                good_pixel_result = True
 
-                # linebuffer = numpy.array([_median, numpy.NaN, numpy.NaN,    # slope, persistency amp & time
-                #                           _sigma, numpy.NaN, numpy.NaN,     # errors/uncertainties
-                #                           numpy.NaN]                        # integrated persistency signal
-                #                          )
+            if (not good_pixel_result or n_unsaturated < 5):
+                # Fitting didn't work, and not enough data for a simple
+                # slope fit either:
+                try:
+                    min_rate = numpy.nanmin(diff_reads[unsaturated])
+                except:
+                    min_rate = 0
+                linebuffer[0,x] = min_rate
+                linebuffer[3,x] = -99
+                linebuffer[7,x] = -numpy.sum(unsaturated)
+
+        # end of loop over all pixels in this row
 
         persistency_fit[:, row, :] = linebuffer
-
-        # time.sleep(numpy.random.random(1) * 0.1)
 
 
     return
