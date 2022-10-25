@@ -317,6 +317,13 @@ def persistency_process_worker(
                 linebuffer[3,x] = -99
                 linebuffer[7,x] = -numpy.sum(unsaturated)
 
+                # if ((x == 385 and row == 81) or (x == 387 and row == 95) or (x == 484 and row == 56)):
+            if (x >380 and x<390 and row > 90 and row < 100):
+                print(x,row, full_fit_mask[x], )
+                numpy.savetxt("dump___x=%d_y=%d.txt" % (x,row),
+                      numpy.array([diff_reads, raw_reads, good_data.astype(numpy.int),
+                                   numpy.ones_like(diff_reads)*linebuffer[0,x]]).T)
+
         # end of loop over all pixels in this row
 
         persistency_fit[:, row, :] = linebuffer
