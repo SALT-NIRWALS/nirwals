@@ -795,12 +795,14 @@ class RSS(object):
         self.clean_stack = self.differential_cube.copy()
         self.clean_stack[bad_data] = numpy.NaN
         self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
+        # pyfits.PrimaryHDU(data=self.clean_stack).writeto("darkcorrect___cleanstack.fits", overwrite=True)
 
         # calculate a average countrate image
         self.logger.info("calculating final image from stack")
         # image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
         self.reduced_image_plain = numpy.nanmean(self.clean_stack, axis=0)
         noise = numpy.sqrt(self.image_stack)
+        # pyfits.PrimaryHDU(data=noise).writeto("darkcorrect___noise.fits", overwrite=True)
         noise[bad_data] = numpy.NaN
         noise[0, :, :] = numpy.NaN
         self.inv_noise = numpy.nansum(1./noise, axis=0)
