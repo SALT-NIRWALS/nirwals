@@ -306,6 +306,9 @@ def persistency_process_worker(
                 linebuffer[7,x] = numpy.sum(good_data)
                 good_pixel_result = True
 
+                linebuffer[1, x] = numpy.nanmean(diff_reads[good_data])
+                linebuffer[2, x] = numpy.nanmean(diff_reads)
+
             if (not good_pixel_result or n_unsaturated < 5):
                 # Fitting didn't work, and not enough data for a simple
                 # slope fit either:
