@@ -619,25 +619,38 @@ class RSS(object):
             self.linearized_cube -= self.dark_cube
 
         elif (dark_mode == "differential"):
-            if (dark.shape[0] == self.differential_cube.shape[0]):
-                # dimensions match, nothing to do
-                dark_correction = dark
-            elif (dark.shape[0] > self.differential_cube.shape[0]):
-                # we have more dark data then is needed
-                dark_correction = dark[:self.differential_cube.shape[0]]
-            else:
-                # we don't have enough data - that's bad, so let's try to extrapolate the rest
-                n_missing = self.differential_cube.shape[0] - dark.shape[0]
-                dark_correction = numpy.pad(dark, pad_width=((0,n_missing), (0,0), (0,0)), mode='edge')
+            # if (dark.shape[0] == self.differential_cube.shape[0]):
+            #     # dimensions match, nothing to do
+            #     dark_correction = dark
+            # elif (dark.shape[0] > self.differential_cube.shape[0]):
+            #     # we have more dark data then is needed
+            #     dark_correction = dark[:self.differential_cube.shape[0]]
+            # else:
+            #     # we don't have enough data - that's bad, so let's try to extrapolate the rest
+            #     n_missing = self.differential_cube.shape[0] - dark.shape[0]
+            #     dark_correction = numpy.pad(dark, pad_width=((0,n_missing), (0,0), (0,0)), mode='edge')
 
             # for bad data do not apply any corrections (better safe than sorry)
-            dark_correction[~numpy.isfinite(dark_correction)] = 0.
+            dark[~numpy.isfinite(dark)] = 0.
 
-            self.logger.info("Applying differential dark correction (shape: %s)" % (str(dark_correction.shape)))
+            self.logger.info("Applying differential dark correction (shape: %s / data: %s)" % (
+                str(dark.shape), str(self.differential_cube.shape)))
             # pyfits.PrimaryHDU(data=dark_correction).writeto("deleteme__darkcorr.fits", overwrite=True)
-            print(self.differential_cube.shape, dark_correction.shape)
+            # print(self.differential_cube.shape, dark.shape)
             # pyfits.PrimaryHDU(data=self.differential_cube).writeto("darkcorrect_before.fits", overwrite=True)
-            self.differential_cube[:,:,] = self.differential_cube[:,:,:] - dark_correction[:,:,:] # * 1e-6)
+
+            extra_darks = None
+            self.logger.info("Dark correction shape: %s" % (str(dark.shape)))
+            for read in range(self.differential_cube.shape[0]):
+                if (read >= dark.shape[0]):
+                    if (extra_darks is None):
+                        extra_darks = numpy.nanmean(dark[-5:, :, :], axis=0)
+                    self.differential_cube[read, :, :] -= extra_darks
+                    self.logger.debug("Dark correction for read %d from dark extrapolation (only %d reads)" % (read, dark.shape[0]))
+                else:
+                    self.logger.debug("Dark correction for read %d from master dark" % (read))
+                    self.differential_cube[read, :, :] -= dark[read, :, :]
+            # self.differential_cube[:,:,] = self.differential_cube[:,:,:] - dark_correction[:,:,:] # * 1e-6)
             # pyfits.PrimaryHDU(data=self.differential_cube).writeto("darkcorrect_after.fits", overwrite=True)
 
         return
