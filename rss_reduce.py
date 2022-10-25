@@ -540,7 +540,7 @@ class RSS(object):
 
 
             self.raw_read_times[img_read-1, img_group-1] = img_exptime
-            self.logger.debug("raw read times: %s" % (str(self.raw_read_times)))
+            # self.logger.debug("raw read times: %s" % (str(self.raw_read_times)))
 
             self.image_stack_raw[img_read-1, img_group-1, :, :] = imgdata
 
@@ -602,7 +602,7 @@ class RSS(object):
                 # load dark-rate image
                 self.logger.info("Loading dark-corrections from %s" % (dark_fn))
                 dark_hdu = pyfits.open(dark_fn)
-                dark = dark_hdu[0].data
+                dark = dark_hdu[1].data
                 self.provenance.add("dark", dark_fn)
             except Exception as e:
                 self.logger.error("error during dark subtraction:\n%s" % (str(e)))
