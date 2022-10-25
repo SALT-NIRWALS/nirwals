@@ -170,16 +170,17 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
         fig.suptitle("x=%d    y=%d" % (x,y))
 
         ax = fig.add_subplot(111)
-        ax.scatter(read_times[good4fit], rate_series[good4fit], marker='o')
-        ax.scatter(read_times[~good4fit], rate_series[~good4fit], marker='o', facecolors='none')
+        ax.scatter(read_times[good4fit], rate_series[good4fit], marker='o', s=2)
+        ax.scatter(read_times[~good4fit], rate_series[~good4fit], marker='o', facecolors='none', s=2, alpha=0.5)
         ax.set_xlabel("Integration time")
         ax.set_ylabel("differential count")
-        ax.set_yscale('log')
+        # ax.set_yscale('log')
         # ax.set_xscale('log')
         #ax.set_ylim((numpy.max([1, numpy.min(rate_series[good4fit])]), 1.8 * numpy.max(rate_series[good4fit])))
         ystart = numpy.min([250, numpy.max([1, numpy.min(rate_series[good4fit])])])
         # ystart = numpy.max([10, numpy.min(rate_series[good4fit])])
-        ax.set_ylim((ystart, 1.3 * numpy.max(rate_series[good4fit])))
+        # ax.set_ylim((ystart, 1.3 * numpy.max(rate_series[good4fit])))
+        ax.set_ylim((-100, 250))
         ax.plot(read_times, _persistency_plus_signal_fit_fct(bestfit, read_times))
 
         ax2 = ax.twinx()
@@ -188,14 +189,26 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
         # ax2.spines['left'].set_color('blue')
         ax2.yaxis.label.set_color('red')
         ax2.tick_params(axis='y', colors='red')
-        ax2.scatter(read_times[good4fit], linear_series[good4fit], c='red')
-        ax2.scatter(read_times[~good4fit], linear_series[~good4fit], c='red', facecolors='none')
+        ax2.scatter(read_times[good4fit], linear_series[good4fit], c='red', s=2)
+        ax2.scatter(read_times[~good4fit], linear_series[~good4fit], c='red', facecolors='none', s=2, alpha=0.5)
         ax2.axhline(y=62000, linestyle=":", color='red')
 
         ax.set_title("S(t) = %.1f + %.1f * exp(-t/%.3f)" % (bestfit[0], bestfit[1], bestfit[2]))
 
-        plot_fn = "__debug_y=%04d_x=%04d.png" % (y,x)
-        fig.savefig(plot_fn, bbox_inches='tight')
+        try:
+            plot_fn = "debugplots/debug_y=%04d_x=%04d.png" % (y,x)
+            print(plot_fn)
+            fig.savefig(plot_fn, bbox_inches='tight')
+        except Exception as e:
+            print(e)
+            pass
+
+        try:
+            dmp_fn = "debugplots/dump_y=%04d_x=%04d.png" % (y,x)
+            numpy.savetxt(dmp_fn, numpy.array([rate_series, linear_series, uncertainties]).T)
+        except:
+            pass
+        
         plt.close(fig)
 
     return bestfit, fit_uncert, good4fit
