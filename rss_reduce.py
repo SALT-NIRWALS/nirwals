@@ -520,7 +520,7 @@ class RSS(object):
             img_group = hdr['GROUP']
             img_read = hdr['READ']
             img_exptime = hdr['ACTEXP'] / 1000000. # convert time from raw microseconds to seconds
-            self.logger.debug("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
+            self.logger.info("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
 
             if (max_number_files > 0 and img_group >= max_number_files):
                 self.logger.debug("img-group > max-number-file --> skipping this file")
@@ -538,7 +538,7 @@ class RSS(object):
                 saturation_mask[  :  , -4: ] = False # right
                 saturation_mask[  :4 ,   : ] = False # top
                 saturation_mask[-4:  ,   : ] = False # bottom
-                self.logger.info("masking out %d saturated pixels" % (
+                self.logger.debug("masking out %d saturated pixels" % (
                     numpy.sum(saturation_mask)))
                 imgdata[saturation_mask] = numpy.Inf
 
