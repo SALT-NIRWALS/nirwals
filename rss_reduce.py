@@ -137,7 +137,7 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
         fit_results = scipy.optimize.least_squares(
             fun=_persistency_plus_signal_fit_err_fct,
             x0=pinit,
-            bounds=([-10, 0, 0.2], [numpy.Inf, 65e3, 100]),
+            bounds=([-100, 0, 1.], [numpy.Inf, 65e3, 2000.]),
             kwargs=dict(read_time=read_time, rate=rate, uncert=uncert),
         )
         bestfit = fit_results.x
