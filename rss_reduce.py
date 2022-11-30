@@ -507,9 +507,13 @@ class RSS(object):
 
         # TODO: Add proper handling for combined Fowler and up-the-ramp sampling
         for fn in _filelist:
-            hdulist = pyfits.open(fn)
-            hdr = hdulist[0].header
-            imgdata = hdulist[0].data.astype(numpy.float32)
+            try:
+                hdulist = pyfits.open(fn)
+                hdr = hdulist[0].header
+                imgdata = hdulist[0].data.astype(numpy.float32)
+            except Exception as e:
+                self.logger.error("Unable to open %s (%s)" % (fn, str(e)))
+                continue
 
             # hdulist.info()
 
