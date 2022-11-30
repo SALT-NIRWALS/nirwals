@@ -711,6 +711,10 @@ class RSS(object):
             self.reference_corrections_cube[:] = self.reset_frame.reshape((-1, self.ny, self.nx))
             # reset_frame_subtracted = self.image_stack - self.reset_frame
 
+        # print(self.read_times)
+        self.logger.info("Typical interval between reads: %.3f seconds" % (
+            numpy.nanmean(numpy.diff(self.read_times[1:-1]))))
+
         # apply any necessary corrections for nonlinearity and other things
         self.logger.info("Applying non-linearity corrections")
         linearized = self.apply_nonlinearity_corrections(reset_frame_subtracted)
