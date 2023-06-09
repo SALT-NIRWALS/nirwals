@@ -7,7 +7,7 @@ import numpy
 
 import astropy.io.fits as pyfits
 
-import nirwals_reduce
+import nirwals
 
 from dev__fitpersistencysignal import fit_persistency_plus_signal_pixel
 

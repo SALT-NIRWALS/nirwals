@@ -2,7 +2,7 @@
 
 import sys
 import os
-import nirwals_reduce
+import nirwals
 
 
 if __name__ == "__main__":

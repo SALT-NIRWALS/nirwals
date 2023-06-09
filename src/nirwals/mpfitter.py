@@ -4,7 +4,7 @@ import scipy
 import numpy
 import multiprocessing
 
-import nirwals_reduce
+import nirwals
 
 import sys
 

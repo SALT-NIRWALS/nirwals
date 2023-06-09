@@ -6,7 +6,7 @@ import sys
 
 import astropy.io.fits as pyfits
 
-import nirwals_reduce
+import nirwals
 
 
 def fitfct(rss, x, y):

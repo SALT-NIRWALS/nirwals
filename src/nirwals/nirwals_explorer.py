@@ -25,7 +25,7 @@ import multiparlog as mplog
 import logging
 
 
-import nirwals_reduce
+import nirwals
 
 
 

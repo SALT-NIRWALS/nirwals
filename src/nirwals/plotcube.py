@@ -7,7 +7,7 @@ import astropy.io.fits as pyfits
 
 import matplotlib.pyplot as plt
 
-import nirwals_reduce
+import nirwals
 
 if __name__ == "__main__":
 

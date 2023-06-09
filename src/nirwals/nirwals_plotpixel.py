@@ -8,7 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import argparse
 
-import nirwals_reduce
+import nirwals
 
 
 if __name__ == "__main__":

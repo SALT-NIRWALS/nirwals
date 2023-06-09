@@ -14,6 +14,6 @@ setup(
     author_email = "kotulla@wisc.edu",
     url = "https://github.com/SALT-NIRWALS/nirwals",
 
-    scripts=['src/nirwals/nirwals_reduce.py',
+    scripts=['src/nirwals/nirwals.py',
              ]
     )
