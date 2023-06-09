@@ -100,8 +100,17 @@ def _persistency_plus_signal_fit_err_fct2(p, read_time, rate, uncert):
     err = uncert #numpy.sqrt(y + 10 ** 2)
     return ((rate - rate_fit) / err)
 
-n_persistency_values = 8
-def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, write_test_plot=False):
+persistency_values = [
+    'PERS.SIGNAL', 'PERS.AMP', 'PERS.TAU', 'PERS2.AMP', 'PERS2.TAU',
+    'PERS.SIGNAL.ERR', 'PERS.AMP.ERR', 'PERS.TAU.ERR', 'PERS2.AMP.ERR', 'PERS2.TAU.ERR',
+    'PERS.INTEGRATED', 'N_PIXELS', 'RAMP.OFFSET', 'SIGNAL_FRACTION'
+]
+n_persistency_values = len(persistency_values)
+n_pars = 5
+
+def persistency_fit_pixel(differential_cube, linearized_cube, read_times,
+                          good_data,
+                          x, y, write_test_plot=False):
 
     rate_series = differential_cube[:, y, x]
     linear_series = linearized_cube[:, y, x]
@@ -113,6 +122,8 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
                numpy.isfinite(rate_series) & \
                numpy.isfinite(uncertainties) & \
                (linear_series < 55000)
+    if (good_data is not None):
+        good4fit = good4fit & good_data
 
     read_time = read_times[good4fit]
     rate = rate_series[good4fit]
@@ -143,13 +154,22 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
     # signal:   -10 ... Inf counts/sec (small negative allowed for noise)
     # persisntency amplite: 0 .. 65K counts/sec
     # timescale tau: 0.2 .. 100 seconds
+    pinit = numpy.array([rate_guess, pers_guess, 2.0, 0, 50.])
     try:
         fit_results = scipy.optimize.least_squares(
-            fun=_persistency_plus_signal_fit_err_fct,
+            fun=_persistency_plus_signal_fit_err_fct2,
             x0=pinit,
-            bounds=([-100, 0, 1.], [numpy.Inf, 65e3, 2000.]),
-            kwargs=dict(read_time=read_time, rate=rate, uncert=uncert),
+            bounds=([0., 0., 1., 0., 5.], [numpy.Inf, 65e3, 4, 65e3, 2000]),
+            kwargs=dict(read_time=read_time, rate=rate,
+                        uncert=uncert),
         )
+
+        # fit_results = scipy.optimize.least_squares(
+        #     fun=_persistency_plus_signal_fit_err_fct,
+        #     x0=pinit,
+        #     bounds=([-100, 0, 0.2], [numpy.Inf, 65e3, 1000.]),
+        #     kwargs=dict(read_time=read_time, rate=rate, uncert=uncert),
+        # )
         bestfit = fit_results.x
         bounds_limited_mask = fit_results.active_mask
         fit_successful = fit_results.success
@@ -170,9 +190,11 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, 
     # Compute uncertainty on the shift and rotation
     if (fit_successful):
         # TODO: Figure out uncertainties here
-        fit_uncert = [0,0,0] #numpy.sqrt(numpy.diag(fit[1]))
+        fit_uncert = numpy.zeros_like(pinit)
+        #[0,0,0] #numpy.sqrt(numpy.diag(fit[1]))
     else:
-        fit_uncert = numpy.array([-99, -99., -99.])  # print(fit[1])
+        fit_uncert = numpy.full_like(pinit, fill_value=-99)
+        #([-99, -99., -99.])  # print(fit[1])
 
     special = False #(x>1025 & x<1050 & y>990 & y<1120)
     if (write_test_plot or special):
@@ -267,6 +289,9 @@ def persistency_process_worker(
 
             good_pixel_result = False
 
+            ramp_offset = linearized_cube[0, row, x]
+
+            raw_reads = linearized_cube[:, row, x]
             diff_reads = differential_cube[:, row, x]
             raw_reads = linearized_cube[:, row, x]
             good_data = (raw_reads > 0) & (raw_reads < 62000)
@@ -284,16 +309,33 @@ def persistency_process_worker(
                 )
                 best_fit, fit_uncertainties, good4fit = results
                 if (best_fit is not None):
-                    linebuffer[0:3, x] = best_fit
-                    linebuffer[3:6, x] = fit_uncertainties
+                    linebuffer[0:n_pars, x] = best_fit
+                    linebuffer[n_pars:2*n_pars, x] = fit_uncertainties
 
                     integrated_persistency = \
                         best_fit[1] * best_fit[2] * (
                         numpy.exp(-read_times[1]/best_fit[2]) - numpy.exp(-numpy.nanmax(read_times)/best_fit[2]))
-                    linebuffer[6, x] = integrated_persistency
+                    linebuffer[-3, x] = integrated_persistency
                     good_pixel_result = True
 
-                linebuffer[7, x] = numpy.sum(good4fit)
+                    # calculate both persistency signal and true signal before saturation
+                    p_signal = best_fit.copy()
+                    p_signal[1:] = 0
+                    only_signal = _persistency_plus_signal_fit_fct2(p=p_signal, read_time=read_times)
+                    cumulative_signal = numpy.nancumsum(only_signal)
+                    p_persistency = best_fit.copy()
+                    p_persistency[0] = 0
+                    only_persistency = _persistency_plus_signal_fit_fct2(p=p_persistency, read_time=read_times)
+                    cumulative_persistency = numpy.nancumsum(only_persistency)
+                    full_data = cumulative_signal + cumulative_persistency
+                    # unsaturated = raw_reads <   full_data < 35000
+                    total_signal = numpy.nansum(only_signal[unsaturated])
+                    total_persistency = numpy.nansum(only_persistency[unsaturated])
+                    signal_fraction = total_signal / (total_persistency + total_signal)
+                    linebuffer[-1, x] = signal_fraction
+
+                linebuffer[-3, x] = numpy.sum(good4fit)
+                linebuffer[-2, x] = 0.
 
             elif (n_unsaturated > 5):
                 # no need for a full fit, just calculate a simple slope
@@ -312,8 +354,9 @@ def persistency_process_worker(
                     good_data[outlier] = False
 
                 linebuffer[0,x] = _median
-                linebuffer[3,x] = _sigma
-                linebuffer[7,x] = numpy.sum(good_data)
+                linebuffer[n_pars,x] = _sigma
+                linebuffer[-3,x] = numpy.sum(good_data)
+                linebuffer[-2,x] = 0.
                 good_pixel_result = True
 
                 linebuffer[1, x] = numpy.nanmean(diff_reads[good_data])
@@ -327,8 +370,8 @@ def persistency_process_worker(
                 except:
                     min_rate = 0
                 linebuffer[0,x] = min_rate
-                linebuffer[3,x] = -99
-                linebuffer[7,x] = -numpy.sum(unsaturated)
+                linebuffer[n_pars,x] = -99
+                linebuffer[-3,x] = -numpy.sum(unsaturated)
 
                 # if ((x == 385 and row == 81) or (x == 387 and row == 95) or (x == 484 and row == 56)):
             if (x >380 and x<390 and row > 90 and row < 100):
@@ -824,7 +867,7 @@ class RSS(object):
         noise[bad_data] = numpy.NaN
         noise[0, :, :] = numpy.NaN
         self.inv_noise = numpy.nansum(1./noise, axis=0)
-        self.weighted_mean = numpy.nansum(self.clean_stack / noise, axis=0) / self.inv_noise
+        self.weighted_mean = numpy.nanmean(self.clean_stack, axis=0) # numpy.nansum(self.clean_stack / noise, axis=0) / self.inv_noise
         self.noise_image = 1. / self.inv_noise
         # print(image.shape)
 
@@ -1167,10 +1210,7 @@ class RSS(object):
                 pyfits.ImageHDU(data=self.noise_image, name='NOISE')
             ])
             try:
-                for i,extname in enumerate([
-                    'PERS.SIGNAL', 'PERS.AMP', 'PERS.TAU',
-                    'PERS.ERR.SIGNAL', 'PERS.ERR.AMP', 'PERS.ERR.TAU',
-                    'PERS.INTEGRATED', 'PERS.NSAMPLES']):
+                for i,extname in enumerate(persistency_values):
                     _list.append(
                         pyfits.ImageHDU(
                             data=rss.persistency_fit_global[i, :, :],
@@ -1225,6 +1265,10 @@ class RSS(object):
 
             threshold = 58000
             need_full_persistency_fit = prev_img > threshold
+            # need_full_persistency_fit[400:450, 1650:1700] = True
+            # only do persistency fitting near the middle - to speed up testing
+            # need_full_persistency_fit[:, :950] = False
+            # need_full_persistency_fit[:, 1050:] = False
             for y in numpy.arange(self.ny):
                 row_queue.put((y, need_full_persistency_fit[y, :]))
         else:
@@ -1733,7 +1777,7 @@ if __name__ == "__main__":
                    )
 
         persistency_options = args.persistency_mode.split(":")
-        persistency_mode = persistency_options[0]
+        persistency_mode = persistency_options[0].lower()
         have_persistency_results = False
         if (persistency_mode == "none"):
             logger.info("Nothing to do")
