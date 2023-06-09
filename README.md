@@ -1,4 +1,4 @@
-# rss_reduce - instrumental detrending pipeline for SALT NIRWALS
+# nirwals_reduce - instrumental detrending pipeline for SALT NIRWALS
 
 ## How to run
 
