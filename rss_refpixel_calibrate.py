@@ -51,7 +51,7 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
     # plt.imshow(amp_blocks)
     # plt.show()
 
-    pyfits.PrimaryHDU(data=amp_blocks).writeto("amp_blocks.fits", overwrite=True)
+    # pyfits.PrimaryHDU(data=amp_blocks).writeto("amp_blocks.fits", overwrite=True)
     avg_amp_background = numpy.median(amp_blocks, axis=1)
     if (debug):
         print("Avg amp levels:", avg_amp_background.shape)
