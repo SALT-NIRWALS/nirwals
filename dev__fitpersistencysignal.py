@@ -14,7 +14,7 @@ import logging
 
 import astropy.io.fits as pyfits
 
-import rss_reduce
+import nirwals_reduce
 
 
 

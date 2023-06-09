@@ -30,14 +30,14 @@ log.setLevel('ERROR')
 import warnings
 warnings.filterwarnings('ignore')
 
-import rss_filepicker
+import nirwals_filepicker
 import provenance
 
 import astropy
 print(astropy.__path__)
 
 
-import rss_refpixel_calibrate
+import nirwals_refpixel_calibrate
 
 # def fit_nonlinearity_sequence(pinit, args):
 #     """

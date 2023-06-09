@@ -5,7 +5,7 @@ import os
 import sys
 import numpy
 
-import rss_reduce
+import nirwals_reduce
 import pyds9 #as pyds9
 import matplotlib.pyplot as plt
 import time

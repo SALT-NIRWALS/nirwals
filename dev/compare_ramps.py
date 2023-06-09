@@ -10,7 +10,7 @@ import logging
 import multiparlog as mplog
 import argparse
 
-import rss_refpixel_calibrate
+import nirwals_refpixel_calibrate
 
 
 def read_at_filelist(listfn, check_fn=True):

@@ -4,7 +4,7 @@
 import os
 import sys
 import numpy
-import rss_reduce
+import nirwals_reduce
 
 import astropy.io.fits as pyfits
 

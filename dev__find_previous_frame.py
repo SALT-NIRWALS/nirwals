@@ -7,7 +7,7 @@ import logging
 import multiparlog as mplog
 
 # from rss_reduce import find_previous_frame
-import rss_filepicker
+import nirwals_filepicker
 
 if __name__ == "__main__":
 

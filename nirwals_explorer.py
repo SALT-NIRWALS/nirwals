@@ -25,7 +25,7 @@ import multiparlog as mplog
 import logging
 
 
-import rss_reduce
+import nirwals_reduce
 
 
 

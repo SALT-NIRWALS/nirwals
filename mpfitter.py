@@ -4,7 +4,7 @@ import scipy
 import numpy
 import multiprocessing
 
-import rss_reduce
+import nirwals_reduce
 
 import sys
 

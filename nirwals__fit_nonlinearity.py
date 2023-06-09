@@ -2,7 +2,7 @@
 
 import sys
 import os
-import rss_reduce
+import nirwals_reduce
 
 
 if __name__ == "__main__":

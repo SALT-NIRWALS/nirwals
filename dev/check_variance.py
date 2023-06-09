@@ -9,8 +9,8 @@ import sys
 import os
 import astropy.io.fits as pyfits
 
-import rss_reduce
-import rss_refpixel_calibrate
+import nirwals_reduce
+import nirwals_refpixel_calibrate
 
 subtract_first = True
 

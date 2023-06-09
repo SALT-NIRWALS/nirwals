@@ -11,7 +11,7 @@ print(matplotlib.get_backend())
 import matplotlib.pyplot as plt
 import numpy
 import astropy.io.fits
-import rss_reduce
+import nirwals_reduce
 
 x = numpy.linspace(-10,10,25)
 

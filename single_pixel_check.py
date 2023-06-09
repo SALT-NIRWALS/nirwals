@@ -8,7 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import argparse
 
-import rss_reduce
+import nirwals_reduce
 
 
 if __name__ == "__main__":

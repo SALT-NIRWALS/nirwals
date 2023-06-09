@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 import astropy.io.fits as pyfits
 
-import rss_reduce
+import nirwals_reduce
 
 if __name__ == "__main__":
 
