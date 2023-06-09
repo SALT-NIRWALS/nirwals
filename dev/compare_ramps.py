@@ -111,8 +111,8 @@ def ramp_by_file(filelist, pixellist):
 
 if __name__ == "__main__":
 
-    mplog.setup_logging(debug_filename="debug.log",
-                        log_filename="compare_ramps.log")
+    mplog.setup_logging(debug_filename="../debug.log",
+                        log_filename="../compare_ramps.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
