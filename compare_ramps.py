@@ -28,72 +28,8 @@ def read_at_filelist(listfn, check_fn=True):
 
     return filelist
 
-if __name__ == "__main__":
 
-    mplog.setup_logging(debug_filename="debug.log",
-                        log_filename="compare_ramps.log")
-    mpl_logger = logging.getLogger('matplotlib')
-    mpl_logger.setLevel(logging.WARNING)
-
-    logger = logging.getLogger("CompareRamps")
-
-    cmdline = argparse.ArgumentParser()
-    cmdline.add_argument("--maxfiles", dest="max_number_files", default=None, type=int,
-                         help="limit number of files to load for processing")
-    cmdline.add_argument("--nonlinearity", dest="nonlinearity_fn", type=str, default=None,
-                         help="non-linearity correction coefficients (3-d FITS cube)")
-    cmdline.add_argument("--prefix", dest="prefix", type=str, default='sequence',
-                         help="non-linearity correction coefficients (3-d FITS cube)")
-    # cmdline.add_argument("--persistency", dest="persistency_mode", type=str, default="quick",
-    #                      help="persistency mode")
-    # cmdline.add_argument("--saturation", dest="saturation", default=62000,
-    #                      help="saturation value/file")
-    # cmdline.add_argument("healpix32", nargs="+", type=int,
-    #                      help="list of input filenames")
-    # cmdline.add_argument("--rerun", type=int, default=6,
-    #                      help="rerun")
-    # cmdline.add_argument("--dumps", dest="write_dumps", default=None,
-    #                      help="write intermediate process data [default: NO]")
-    # cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
-    #                      help="generate debug plots for all pixels with persistency [default: NO]")
-    cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
-                         help="use reference pixels [default: NO]")
-    # cmdline.add_argument("--flat4salt", dest="write_flat_for_salt", default=False, action='store_true',
-    #                      help="write a flat, 1-extension FITS file for SALT")
-    cmdline.add_argument("inputs", nargs="+",
-                         help="list of input filenames : pixels")
-    args = cmdline.parse_args()
-
-
-    #
-    # Read input options: List of input filenames, and pixel coordinates
-    #
-    filelist = []
-    pixel_coord_list = []
-    is_pixel = False
-    for i in args.inputs:
-        if (i == ":"):
-            is_pixel = True
-            continue
-        if (is_pixel):
-            print(i)
-            if (i.startswith("@") and os.path.isfile(i[1:])):
-                add_list = read_at_filelist(i[1:], check_fn=False)
-                print(add_list)
-                new_xy = [[int(float(x)) for x in l.split()[:2]] for l in add_list]
-                pixel_coord_list.extend(new_xy)
-            else:
-                xy = [int(float(x)) for x in i.split(",")[:2]]
-                pixel_coord_list.append(xy)
-        else:
-            if (i.startswith("@") and os.path.isfile(i[1:])):
-                filelist.extend(read_at_filelist(i[1:]))
-            elif (os.path.isfile(i)):
-                filelist.append(i)
-
-    print("Files:", "\n -- ".join(['']+filelist))
-    print("Pixels:", pixel_coord_list)
-    n_pixels = len(pixel_coord_list)
+def ramps_by_pixel(filelist, pixel_coord_list):
 
     #
     # Extract all pixel values, and timings
@@ -122,6 +58,7 @@ if __name__ == "__main__":
                 hdulist = pyfits.open(fitsfn)
             except OSError:
                 actexp_list.append(numpy.NaN)
+                print("Failed to open file %s " % (fitsfn))
                 continue
 
             # track integration times
@@ -168,3 +105,77 @@ if __name__ == "__main__":
         # break
 
 
+def ramp_by_file(filelist, pixellist):
+    pass
+
+
+if __name__ == "__main__":
+
+    mplog.setup_logging(debug_filename="debug.log",
+                        log_filename="compare_ramps.log")
+    mpl_logger = logging.getLogger('matplotlib')
+    mpl_logger.setLevel(logging.WARNING)
+
+    logger = logging.getLogger("CompareRamps")
+
+    cmdline = argparse.ArgumentParser()
+    cmdline.add_argument("--maxfiles", dest="max_number_files", default=None, type=int,
+                         help="limit number of files to load for processing")
+    cmdline.add_argument("--nonlinearity", dest="nonlinearity_fn", type=str, default=None,
+                         help="non-linearity correction coefficients (3-d FITS cube)")
+    cmdline.add_argument("--prefix", dest="prefix", type=str, default='sequence',
+                         help="non-linearity correction coefficients (3-d FITS cube)")
+    # cmdline.add_argument("--persistency", dest="persistency_mode", type=str, default="quick",
+    #                      help="persistency mode")
+    # cmdline.add_argument("--saturation", dest="saturation", default=62000,
+    #                      help="saturation value/file")
+    # cmdline.add_argument("healpix32", nargs="+", type=int,
+    #                      help="list of input filenames")
+    # cmdline.add_argument("--rerun", type=int, default=6,
+    #                      help="rerun")
+    # cmdline.add_argument("--dumps", dest="write_dumps", default=None,
+    #                      help="write intermediate process data [default: NO]")
+    # cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
+    #                      help="generate debug plots for all pixels with persistency [default: NO]")
+    cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
+                         help="use reference pixels [default: NO]")
+    # cmdline.add_argument("--flat4salt", dest="write_flat_for_salt", default=False, action='store_true',
+    #                      help="write a flat, 1-extension FITS file for SALT")
+    cmdline.add_argument("--perframe", dest="combine_pixels_per_frame", default=False, action='store_true',
+                         help="combined multiple pixels per file (rathen than multiple files per pixel)")
+    cmdline.add_argument("inputs", nargs="+",
+                         help="list of input filenames : pixels")
+    args = cmdline.parse_args()
+
+
+    #
+    # Read input options: List of input filenames, and pixel coordinates
+    #
+    filelist = []
+    pixel_coord_list = []
+    is_pixel = False
+    for i in args.inputs:
+        if (i == ":"):
+            is_pixel = True
+            continue
+        if (is_pixel):
+            print(i)
+            if (i.startswith("@") and os.path.isfile(i[1:])):
+                add_list = read_at_filelist(i[1:], check_fn=False)
+                print(add_list)
+                new_xy = [[int(float(x)) for x in l.split()[:2]] for l in add_list]
+                pixel_coord_list.extend(new_xy)
+            else:
+                xy = [int(float(x)) for x in i.split(",")[:2]]
+                pixel_coord_list.append(xy)
+        else:
+            if (i.startswith("@") and os.path.isfile(i[1:])):
+                filelist.extend(read_at_filelist(i[1:]))
+            elif (os.path.isfile(i)):
+                filelist.append(i)
+
+    print("Files:", "\n -- ".join(['']+filelist))
+    print("Pixels:", pixel_coord_list)
+    n_pixels = len(pixel_coord_list)
+
+    ramps_by_pixel(filelist, pixel_coord_list)
