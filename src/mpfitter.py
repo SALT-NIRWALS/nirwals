@@ -4,7 +4,7 @@ import scipy
 import numpy
 import multiprocessing
 
-import nirwals
+from nirwals import NIRWALS
 
 import sys
 
@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # get some data to play with
     fn = sys.argv[1]
-    rss = rss_reduce.NIRWALS(fn, max_number_files=40, )
+    rss = NIRWALS(fn, max_number_files=40, )
     rss.load_all_files()
     # rss.reduce(write_dumps=False)
 

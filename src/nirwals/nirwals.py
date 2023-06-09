@@ -829,7 +829,7 @@ class NIRWALS(object):
         if (mask_bad_data is None):
             mask_bad_data = self.mask_BAD_DARK | self.mask_SATURATED | self.mask_LOW_RATE | self.mask_NEGATIVE
         self.logger.info("Identifying bad/dead/saturated/negative pixels (0x%02x)" % (mask_bad_data))
-        bad_data = numpy.zeros_like(self.image_stack, dtype=numpy.bool)
+        bad_data = numpy.zeros_like(self.image_stack, dtype=bool)
         if (mask_bad_data is not None and (mask_bad_data & self.mask_SATURATED) > 0):
             bad_data = bad_data | (self.image_stack > self.saturation_level)
         if (mask_bad_data is not None and (mask_bad_data & self.mask_LOW_RATE) > 0):

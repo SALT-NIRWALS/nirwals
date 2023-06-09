@@ -12,7 +12,7 @@ if __name__ == "__main__":
     fn = sys.argv[1]
 
     print("Loading all files, preparing for plotting")
-    rss = rss_reduce.NIRWALS(fn=fn)
+    rss = nirwals.NIRWALS(fn=fn)
     rss.load_all_files()
 
     amp1s = []

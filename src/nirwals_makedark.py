@@ -7,7 +7,7 @@ import numpy
 
 import astropy.io.fits as pyfits
 
-import nirwals
+from  nirwals import NIRWALS
 
 from dev__fitpersistencysignal import fit_persistency_plus_signal_pixel
 
@@ -31,12 +31,12 @@ if __name__ == "__main__":
 
     for fn in args.files:
 
-        rss = rss_reduce.NIRWALS(fn, max_number_files=args.max_number_files)
+        rss = NIRWALS(fn, max_number_files=args.max_number_files)
 
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
-                   mask_bad_data=rss_reduce.NIRWALS.mask_SATURATED)
+                   mask_bad_data=NIRWALS.mask_SATURATED)
 
         # count the number of good samples
         number_good_dark_samples = numpy.sum(~rss.bad_data_mask, axis=0)
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         darkrate = rss.weighted_mean / delta_exptime
 
         # keep track of what kind of pixel each one is
-        pixeltype = numpy.full_like(darkrate, fill_value=rss_reduce.darktype_GOOD, dtype=numpy.int)
+        pixeltype = numpy.full_like(darkrate, fill_value=nirwals.darktype_GOOD, dtype=numpy.int)
 
         # find typical noise levels, so we can identify pixels that may need special treatment
         good_data = numpy.isfinite(darkrate)
@@ -72,15 +72,15 @@ if __name__ == "__main__":
         negative_pixels = ~good_data & (darkrate < 0)
         # let's ignore those for now, and set the actual dark-current to 0
         # TODO: add code here
-        pixeltype[negative_pixels] = rss_reduce.darktype_COLD
+        pixeltype[negative_pixels] = nirwals.darktype_COLD
 
         min_exptime_required = 15. # seconds
         min_frames = min_exptime_required / (delta_exptime)
         hot_pixels = ~good_data & (darkrate > 0) & (number_good_dark_samples < min_frames)
-        pixeltype[hot_pixels] = rss_reduce.darktype_HOT
+        pixeltype[hot_pixels] = nirwals.darktype_HOT
 
         warm_pixels = ~good_data & (darkrate > 0) & (number_good_dark_samples >= min_frames)
-        pixeltype[warm_pixels] = rss_reduce.darktype_WARM
+        pixeltype[warm_pixels] = nirwals.darktype_WARM
         iy,ix = numpy.indices(darkrate.shape)
         ixy = numpy.dstack([ix,iy])
         print("IXY", ixy.shape)

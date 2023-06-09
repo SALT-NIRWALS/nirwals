@@ -2,7 +2,8 @@
 
 import sys
 import os
-import nirwals
+
+from nirwals import NIRWALS
 
 
 if __name__ == "__main__":
@@ -14,7 +15,7 @@ if __name__ == "__main__":
     except:
         saturation_fn = 62000
 
-    rss = rss_reduce.NIRWALS(fn, saturation=saturation_fn)
+    rss = NIRWALS(fn, saturation=saturation_fn)
 
     # rss.reduce(write_dumps=False)
     # rss.write_results()
