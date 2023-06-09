@@ -197,6 +197,8 @@ def persistency_fit_pixel(differential_cube, linearized_cube, read_times,
         #([-99, -99., -99.])  # print(fit[1])
 
     special = False #(x>1025 & x<1050 & y>990 & y<1120)
+    # special = (x>1650 and x<1700 and y>400 and y<450)
+    # special = (x >380 and x<500 and y > 200 and y < 250)
     if (write_test_plot or special):
         fig = plt.figure()
         fig.suptitle("x=%d    y=%d" % (x,y))
@@ -304,6 +306,7 @@ def persistency_process_worker(
                     differential_cube=differential_cube,
                     linearized_cube=linearized_cube,
                     read_times=read_times,
+                    good_data=good_data,
                     x=x, y=row,
                     write_test_plot=write_test_plots,
                 )
