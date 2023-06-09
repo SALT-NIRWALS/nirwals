@@ -1,0 +1,19 @@
+[project]
+name = "nirwals"
+version = "0.0.1"
+authors = [
+  { name="Ralf Kotulla", email="ralf.kotulla@gmail.com" },
+]
+description = "basic instrument signature removal for the NIRWALS instrument on the SALT telescope"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/SALT-NIRWALS/nirwals"
+"Bug Tracker" = "https://github.com/SALT-NIRWALS/nirwals/issues"
