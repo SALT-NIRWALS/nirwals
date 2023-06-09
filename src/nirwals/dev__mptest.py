@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     fn = sys.argv[1]
 
-    rss = rss_reduce.RSS(fn, max_number_files=10)
+    rss = rss_reduce.NIRWALS(fn, max_number_files=10)
     rss.load_all_files()
     # rss.apply_nonlinearity_corrections()
     rss.image_stack -= rss.image_stack[0, :, :]

@@ -31,12 +31,12 @@ if __name__ == "__main__":
 
     for fn in args.files:
 
-        rss = rss_reduce.RSS(fn, max_number_files=args.max_number_files)
+        rss = rss_reduce.NIRWALS(fn, max_number_files=args.max_number_files)
 
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,
-                   mask_bad_data=rss_reduce.RSS.mask_SATURATED)
+                   mask_bad_data=rss_reduce.NIRWALS.mask_SATURATED)
 
         # count the number of good samples
         number_good_dark_samples = numpy.sum(~rss.bad_data_mask, axis=0)

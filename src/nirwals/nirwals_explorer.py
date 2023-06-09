@@ -250,7 +250,7 @@ if __name__ == "__main__":
 
     rss = None
     print("Preparing RSS data cube")
-    rss = rss_reduce.RSS(fn=fn, max_number_files=50, use_reference_pixels=True)
+    rss = rss_reduce.NIRWALS(fn=fn, max_number_files=50, use_reference_pixels=True)
     rss.reduce()
     print("Using persistency from %s" % (persistency_fn))
     rss.load_precalculated_results(persistency_fit_fn=persistency_fn)

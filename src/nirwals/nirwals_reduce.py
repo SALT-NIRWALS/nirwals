@@ -403,7 +403,7 @@ dump_options = [
     'ngoodpixels',
 ]
 
-class RSS(object):
+class NIRWALS(object):
 
     mask_SATURATED = 0x0001
     mask_LOW_RATE = 0x0002
@@ -1758,10 +1758,10 @@ if __name__ == "__main__":
     for fn in args.files:
         # fn = sys.argv[1]
 
-        rss = RSS(fn, max_number_files=args.max_number_files,
-                  use_reference_pixels=args.use_ref_pixels,
-                  saturation=args.saturation,
-                  )
+        rss = NIRWALS(fn, max_number_files=args.max_number_files,
+                      use_reference_pixels=args.use_ref_pixels,
+                      saturation=args.saturation,
+                      )
 
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))

@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
     for fn in args.files:
 
-        rss = rss_reduce.RSS(fn)
+        rss = rss_reduce.NIRWALS(fn)
         # rss.reduce(write_dumps=False)
         # rss.write_results()
 

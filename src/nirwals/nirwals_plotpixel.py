@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     for fn in args.files:
 
-        rss = rss_reduce.RSS(fn)
+        rss = rss_reduce.NIRWALS(fn)
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
             rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=args.write_dumps,

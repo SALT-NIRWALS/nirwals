@@ -35,7 +35,7 @@ if __name__ == "__main__":
     datacubes = []
     for fn in args.files:
         print("Reading input %s" % (fn))
-        rss = rss_reduce.RSS(fn, max_number_files=args.max_number_files)
+        rss = rss_reduce.NIRWALS(fn, max_number_files=args.max_number_files)
         rss.load_all_files()
         rss.reset_frame = rss.image_stack[0]
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):

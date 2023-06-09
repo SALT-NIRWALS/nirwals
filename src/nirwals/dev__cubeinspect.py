@@ -23,7 +23,7 @@ if __name__ == "__main__":
     ds9.set("file %s" % (display_fn))
 
     print("Loading all files, preparing for plotting")
-    rss = rss_reduce.RSS(fn=fn)
+    rss = rss_reduce.NIRWALS(fn=fn)
     rss.load_all_files()
 
     while (True):

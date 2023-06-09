@@ -12,7 +12,7 @@ import nirwals_reduce
 if __name__ == "__main__":
 
     fn = sys.argv[1]
-    rss = rss_reduce.RSS(fn)
+    rss = rss_reduce.NIRWALS(fn)
     rss.load_all_files()
 
     # rss.read_nonlinearity_corrections("nonlin_inverse.fits")
