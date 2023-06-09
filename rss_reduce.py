@@ -89,6 +89,16 @@ def _persistency_plus_signal_fit_err_fct(p, read_time, rate, uncert):
     err = uncert #numpy.sqrt(y + 10 ** 2)
     return ((rate - rate_fit) / err)
 
+def _persistency_plus_signal_fit_fct2(p, read_time):
+    # y = numpy.zeros(x.shape)
+    # for i in range(p.shape[0]):
+    #     y += p[i] * x ** (i + 1)
+    signal = numpy.ones_like(read_time) * p[0] + p[1] * numpy.exp(-read_time/p[2]) + p[3] * numpy.exp(-read_time/p[4])
+    return signal
+def _persistency_plus_signal_fit_err_fct2(p, read_time, rate, uncert):
+    rate_fit = _persistency_plus_signal_fit_fct2(p, read_time)
+    err = uncert #numpy.sqrt(y + 10 ** 2)
+    return ((rate - rate_fit) / err)
 
 n_persistency_values = 8
 def persistency_fit_pixel(differential_cube, linearized_cube, read_times, x, y, write_test_plot=False):
