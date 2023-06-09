@@ -4,13 +4,10 @@
 import astropy.io.fits as pyfits
 import numpy
 import os
-import sys
 
 import logging
 import multiparlog as mplog
 import argparse
-
-import nirwals_refpixel_calibrate
 
 
 def read_at_filelist(listfn, check_fn=True):

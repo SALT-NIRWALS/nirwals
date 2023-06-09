@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 
-import matplotlib.pyplot as plt
 import numpy
-import pandas
-import glob
-import scipy.optimize
 import sys
 import os
 import astropy.io.fits as pyfits
-
-import nirwals_reduce
-import nirwals_refpixel_calibrate
 
 subtract_first = True
 

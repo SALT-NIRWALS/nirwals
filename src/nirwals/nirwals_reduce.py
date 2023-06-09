@@ -24,7 +24,7 @@ log.setLevel('ERROR')
 import warnings
 warnings.filterwarnings('ignore')
 
-import provenance
+from .provenance import DataProvenance
 
 import astropy
 print(astropy.__path__)
@@ -440,7 +440,7 @@ class RSS(object):
         self.saturation_percentile = saturation_percentile
         self.mask_saturated_pixels = mask_saturated_pixels
 
-        self.provenance = provenance.DataProvenance(
+        self.provenance = DataProvenance(
             logger=self.logger,
             track_machine_data=True
         )
@@ -1709,7 +1709,7 @@ class RSS(object):
 
 if __name__ == "__main__":
 
-    mplog.setup_logging(debug_filename="../debug.log",
+    mplog.setup_logging(debug_filename="../../debug.log",
                         log_filename="run_analysis.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
