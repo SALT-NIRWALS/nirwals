@@ -14,6 +14,9 @@ setup(
     author_email = "kotulla@wisc.edu",
     url = "https://github.com/SALT-NIRWALS/nirwals",
 
-    scripts=['src/nirwals/nirwals.py',
+    scripts=['src/nirwals_reduce.py',
+             'src/nirwals_makedark.py',
+             'src/nirwals_makemasterdark.py',
+             'src/nirwals_fit_nonlinearity.py',
              ]
     )
