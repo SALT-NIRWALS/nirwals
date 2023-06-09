@@ -224,7 +224,7 @@ def rss_plotter(rss, ds9_queue, save_plots=False):
 
 if __name__ == "__main__":
 
-    mplog.setup_logging(debug_filename="debug.log",
+    mplog.setup_logging(debug_filename="../debug.log",
                         log_filename="run_analysis.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)

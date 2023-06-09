@@ -4,13 +4,7 @@ import sys
 print(sys.path)
 
 import logging
-import multiprocessing
 import os
-import queue
-import threading
-import time
-import glob
-import datetime
 
 import multiparlog as mplog
 
@@ -30,14 +24,11 @@ log.setLevel('ERROR')
 import warnings
 warnings.filterwarnings('ignore')
 
-import nirwals_filepicker
 import provenance
 
 import astropy
 print(astropy.__path__)
 
-
-import nirwals_refpixel_calibrate
 
 # def fit_nonlinearity_sequence(pinit, args):
 #     """
@@ -1718,7 +1709,7 @@ class RSS(object):
 
 if __name__ == "__main__":
 
-    mplog.setup_logging(debug_filename="debug.log",
+    mplog.setup_logging(debug_filename="../debug.log",
                         log_filename="run_analysis.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)

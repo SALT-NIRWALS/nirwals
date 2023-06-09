@@ -11,7 +11,7 @@ import nirwals_filepicker
 
 if __name__ == "__main__":
 
-    mplog.setup_logging(debug_filename="debug.log",
+    mplog.setup_logging(debug_filename="../debug.log",
                         log_filename="run_analysis.log")
 
     sci_fn = sys.argv[1]
