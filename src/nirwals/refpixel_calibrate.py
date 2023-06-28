@@ -11,8 +11,105 @@ import multiparlog as mplog
 import argparse
 
 dummycounter = 0
+n_amps=32
 
-def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False, yslope=True, even_odd=False):
+def refpixel_plain(data, edge=1, debug=False):
+
+    # now figure out the column situation
+    top = data[edge:4, :]
+    bottom = data[-4:-edge, :]
+    ref_columns = numpy.vstack([top, bottom])
+    if (debug):
+        print("ref-columns shape:", ref_columns.shape)
+    n_rows = 8 - 2*edge
+    n_amps = 32
+    amp_size = ref_columns.shape[1] // n_amps
+
+    # take out the average intensity in each amplifier-block
+    amp_blocks = ref_columns.T.reshape((n_amps, -1))  # .reshape((-1, n_amps))
+    avg_amp_background = numpy.median(amp_blocks, axis=1)
+    amp_background = numpy.repeat(avg_amp_background.reshape((-1, 1)), amp_size).reshape((1, -1))
+
+    # prepare the first-order correction and apply to the reference pixels themselves
+    ref_background = numpy.median(ref_columns, axis=0)
+    amp_background_2d = numpy.ones_like(ref_columns) * amp_background
+
+    if (debug):
+        print("amp_blocks shape:", amp_blocks.shape)
+        print("Avg amp levels:", avg_amp_background.shape)
+        print("amp background:", amp_background.shape)
+
+        print("REF BG:", ref_background.shape)
+        numpy.savetxt("ref_cols.txt", ref_background)
+        numpy.savetxt("amp_background.txt", amp_background.T)
+        numpy.savetxt("ref_columns.txt", ref_columns.T)
+
+    full_2d_correction = numpy.ones_like(data) * amp_background
+    return full_2d_correction
+
+
+def refpixel_blockyslope(data, edge=1, debug=False):
+
+    # figure out the column situation
+    top = data[edge:4, :]
+    bottom = data[-4:-edge, :]
+
+    # If we are fitting vertical slopes, this is done on a column-by-column basis
+    mean_top = numpy.mean(top, axis=0)
+    mean_bottom = numpy.mean(bottom, axis=0)
+    blocky_top = numpy.mean(mean_top.reshape((n_amps, -1)), axis=1)
+    blocky_bottom = numpy.mean(mean_bottom.reshape((n_amps, -1)), axis=1)
+
+    print(blocky_top.shape, blocky_bottom.shape)
+    numpy.savetxt("meantop", mean_top)
+    numpy.savetxt("meanbottom", mean_bottom)
+    numpy.savetxt("blockytop", blocky_top)
+    numpy.savetxt("blockybottom", blocky_bottom)
+
+    slopes = (blocky_bottom - blocky_top) / (2048-edge-4)  # that's the number of pixels between top & bottom
+    print(slopes)
+
+    blocky_iy,_ = numpy.indices((data.shape[0],n_amps), dtype=float)
+    print("blocky_iy shape:", blocky_iy.shape)
+    blocky_corr = blocky_iy * slopes + blocky_top
+
+
+    #full_iy,_ = numpy.indices(data.shape, dtype=float)
+    full_2d_correction = numpy.repeat(blocky_corr, 64, axis=1)
+    print(full_2d_correction.shape)
+        # * slopes + mean_top
+
+    if (debug):
+        pyfits.PrimaryHDU(data=full_2d_correction).writeto("refpixel__blockyslope.fits", overwrite=True)
+
+    return full_2d_correction
+
+
+
+def refpixel_yslope(data, edge=1, debug=False):
+
+    # figure out the column situation
+    top = data[edge:4, :]
+    bottom = data[-4:-edge, :]
+
+    # If we are fitting vertical slopes, this is done on a column-by-column basis
+    mean_top = numpy.mean(top, axis=0)
+    mean_bottom = numpy.mean(bottom, axis=0)
+    slopes = (mean_bottom - mean_top) / (2048-edge-4)  # that's the number of pixels between top & bottom
+
+    full_iy,_ = numpy.indices(data.shape, dtype=float)
+    full_2d_correction = full_iy * slopes + mean_top
+
+    print("top", full_iy[:5,0])
+    print("bottom", full_iy[-5:, 0])
+
+    if (debug):
+        pyfits.PrimaryHDU(data=full_2d_correction).writeto("refpixel__yslope.fits", overwrite=True)
+
+    return full_2d_correction
+
+
+def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False, mode='plain'):
 
     global dummycounter
     dummycounter += 1
@@ -30,6 +127,23 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
     # data_rowsub = data - row_wise
     # if (debug):
     #     pyfits.PrimaryHDU(data=data_rowsub).writeto("del__rowsub_%d.fits" % (dummycounter), overwrite=True)
+
+    if (mode == 'plain'):
+        full_2d_correction = refpixel_plain(data, edge, debug)
+
+    elif (mode == 'blockyslope'):
+        print("Use blockyslope mode")
+        full_2d_correction = refpixel_blockyslope(data, edge, debug)
+
+    elif (mode == 'yslope'):
+        full_2d_correction = refpixel_yslope(data, edge, debug)
+
+    else:
+        print("This reference pixel correction mode (%s) is NOT understood/supported" % (mode))
+        return 0
+
+    return full_2d_correction
+
 
     # now figure out the column situation
     top = data[edge:4, :]
@@ -59,26 +173,7 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
 
         return full_2d_correction
 
-    else:
 
-        # take out the average intensity in each amplifier-block
-        amp_blocks = ref_columns.T.reshape((n_amps, -1)) #.reshape((-1, n_amps))
-        avg_amp_background = numpy.median(amp_blocks, axis=1)
-        amp_background = numpy.repeat(avg_amp_background.reshape((-1,1)), amp_size).reshape((1,-1))
-
-        # prepare the first-order correction and apply to the reference pixels themselves
-        ref_background = numpy.median(ref_columns, axis=0)
-        amp_background_2d = numpy.ones_like(ref_columns) * amp_background
-
-        if (debug):
-            print("amp_blocks shape:", amp_blocks.shape)
-            print("Avg amp levels:", avg_amp_background.shape)
-            print("amp background:", amp_background.shape)
-
-            print("REF BG:", ref_background.shape)
-            numpy.savetxt("ref_cols.txt", ref_background)
-            numpy.savetxt("amp_background.txt", amp_background.T)
-            numpy.savetxt("ref_columns.txt", ref_columns.T)
 
     if (make_plots):
         fig = plt.figure()
@@ -188,10 +283,8 @@ if __name__ == "__main__":
     cmdline = argparse.ArgumentParser()
     cmdline.add_argument("--output", dest="output_fn", type=str, default="reduced",
                          help="addition to output filename")
-    cmdline.add_argument("--evenodd", dest="even_odd", default=False, action='store_true',
+    cmdline.add_argument("--mode", dest="mode", default='simple',
                          help="apply even/odd pixel correction")
-    cmdline.add_argument("--yslope", dest="yslope", default=False, action='store_true',
-                         help="apply vertical slope correction")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -204,7 +297,7 @@ if __name__ == "__main__":
 
     full_2d_correction = reference_pixels_to_background_correction(
         data, debug=True, make_plots=True,
-        even_odd=args.even_odd, yslope=args.yslope)
+        mode=args.mode)
 
     data = data - full_2d_correction
     hdulist[0].data = data
