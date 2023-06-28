@@ -7,10 +7,12 @@ import numpy
 
 import matplotlib.pyplot as plt
 import logging
+import multiparlog as mplog
+import argparse
 
 dummycounter = 0
 
-def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False, even_odd=False):
+def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False, yslope=True, even_odd=False):
 
     global dummycounter
     dummycounter += 1
@@ -163,13 +165,36 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
 
 if __name__ == "__main__":
 
-    fn = sys.argv[1]
-    output_fn = sys.argv[2]
+
+
+
+    mplog.setup_logging(debug_filename="debug.log",
+                        log_filename="run_analysis.log")
+    mpl_logger = logging.getLogger('matplotlib')
+    mpl_logger.setLevel(logging.WARNING)
+
+    logger = logging.getLogger("NIRWALS-RefPixel")
+
+    cmdline = argparse.ArgumentParser()
+    cmdline.add_argument("--output", dest="output_fn", type=str, default="reduced",
+                         help="addition to output filename")
+    cmdline.add_argument("--evenodd", dest="even_odd", default=False, action='store_true',
+                         help="apply even/odd pixel correction")
+    cmdline.add_argument("--yslope", dest="yslope", default=False, action='store_true',
+                         help="apply vertical slope correction")
+    cmdline.add_argument("files", nargs="+",
+                         help="list of input filenames")
+    args = cmdline.parse_args()
+
+    fn = args.files[0] #sys.argv[1]
+    output_fn = args.output_fn #sys.argv[2]
 
     hdulist = pyfits.open(fn)
     data = hdulist[0].data
 
-    full_2d_correction = reference_pixels_to_background_correction(data, debug=True, make_plots=True, even_odd=True)
+    full_2d_correction = reference_pixels_to_background_correction(
+        data, debug=True, make_plots=True,
+        even_odd=args.even_odd, yslope=args.yslope)
 
     data = data - full_2d_correction
     hdulist[0].data = data
