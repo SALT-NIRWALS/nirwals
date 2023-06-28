@@ -45,19 +45,40 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
     iy,ix = numpy.indices(ref_columns.shape)
     # ref_columns = numpy.cos(ix * numpy.pi / 32) + 0.5*numpy.cos(ix * numpy.pi/64)
 
-    # take out the average intensity in each amplifier-block
-    amp_blocks = ref_columns.T.reshape((n_amps, -1)) #.reshape((-1, n_amps))
-    if (debug):
-        print("amp_blocks shape:", amp_blocks.shape)
+    if (yslope):
+        # If we are fitting vertical slopes, this is done on a column-by-column basis
+        mean_top = numpy.mean(top, axis=0)
+        mean_bottom = numpy.mean(bottom, axis=0)
+        slopes = (mean_bottom - mean_top) / (2048-edge-4)  # that's the number of pixels between top & bottom
 
-    # plt.imshow(ix[:, ::32])
-    # plt.imshow(amp_blocks)
-    # plt.show()
+        full_iy,_ = numpy.indices(data.shape, dtype=float)
+        full_2d_correction = full_iy * slopes + mean_top
 
-    # pyfits.PrimaryHDU(data=amp_blocks).writeto("amp_blocks.fits", overwrite=True)
-    avg_amp_background = numpy.median(amp_blocks, axis=1)
-    if (debug):
-        print("Avg amp levels:", avg_amp_background.shape)
+        if (debug):
+            pyfits.PrimaryHDU(data=full_2d_correction).writeto("refpixel__yslope.fits", overwrite=True)
+
+        return full_2d_correction
+
+    else:
+
+        # take out the average intensity in each amplifier-block
+        amp_blocks = ref_columns.T.reshape((n_amps, -1)) #.reshape((-1, n_amps))
+        avg_amp_background = numpy.median(amp_blocks, axis=1)
+        amp_background = numpy.repeat(avg_amp_background.reshape((-1,1)), amp_size).reshape((1,-1))
+
+        # prepare the first-order correction and apply to the reference pixels themselves
+        ref_background = numpy.median(ref_columns, axis=0)
+        amp_background_2d = numpy.ones_like(ref_columns) * amp_background
+
+        if (debug):
+            print("amp_blocks shape:", amp_blocks.shape)
+            print("Avg amp levels:", avg_amp_background.shape)
+            print("amp background:", amp_background.shape)
+
+            print("REF BG:", ref_background.shape)
+            numpy.savetxt("ref_cols.txt", ref_background)
+            numpy.savetxt("amp_background.txt", amp_background.T)
+            numpy.savetxt("ref_columns.txt", ref_columns.T)
 
     if (make_plots):
         fig = plt.figure()
@@ -69,17 +90,6 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
         ax.scatter((numpy.arange(n_amps)+0.5)*amp_size, avg_amp_background)
         fig.show()
 
-    amp_background = numpy.repeat(avg_amp_background.reshape((-1,1)), amp_size).reshape((1,-1))
-    if (debug):
-        print("amp background:", amp_background.shape)
-
-    ref_background = numpy.median(ref_columns, axis=0)
-    if (debug):
-        print("REF BG:", ref_background.shape)
-        numpy.savetxt("ref_cols.txt", ref_background)
-        numpy.savetxt("amp_background.txt", amp_background.T)
-        numpy.savetxt("ref_columns.txt", ref_columns.T)
-    amp_background_2d = numpy.ones_like(ref_columns) * amp_background
 
     normalized_ref_columns = ref_columns - amp_background
 
