@@ -15,23 +15,23 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
     global dummycounter
     dummycounter += 1
 
-    # first, combine left & right to subtract row-wise overscan level
-    _left = numpy.mean(data[:, edge:4], axis=1).reshape((-1,1))
-    _right = numpy.mean(data[:, -4:-edge], axis=1).reshape((-1,1))
-    row_wise = numpy.mean([_left, _right], axis=0)
-    if (debug):
-        print(row_wise.shape)
+    # # first, combine left & right to subtract row-wise overscan level
+    # _left = numpy.mean(data[:, edge:4], axis=1).reshape((-1,1))
+    # _right = numpy.mean(data[:, -4:-edge], axis=1).reshape((-1,1))
+    # row_wise = numpy.mean([_left, _right], axis=0)
+    # if (debug):
+    #     print(row_wise.shape)
 
     # plt.scatter(numpy.arange(row_wise.shape[0]), row_wise, s=1)
     # plt.show()
 
-    data_rowsub = data - row_wise
-    if (debug):
-        pyfits.PrimaryHDU(data=data_rowsub).writeto("del__rowsub_%d.fits" % (dummycounter), overwrite=True)
+    # data_rowsub = data - row_wise
+    # if (debug):
+    #     pyfits.PrimaryHDU(data=data_rowsub).writeto("del__rowsub_%d.fits" % (dummycounter), overwrite=True)
 
     # now figure out the column situation
-    top = data_rowsub[edge:4, :]
-    bottom = data_rowsub[-4:-edge, :]
+    top = data[edge:4, :]
+    bottom = data[-4:-edge, :]
     ref_columns = numpy.vstack([top, bottom])
     if (debug):
         print("ref-columns shape:", ref_columns.shape)
@@ -132,12 +132,12 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
 
 
     # apply the column-wise correction to the full frame
-    image = data_rowsub - total_column_correction
+    image = data - total_column_correction
 
     if (debug):
         pyfits.PrimaryHDU(data=image).writeto("del__totalcorrected.fits", overwrite=True)
 
-    full_2d_correction = row_wise + total_column_correction
+    full_2d_correction = total_column_correction
     if (debug):
         print("full 2d:", full_2d_correction.shape)
 
