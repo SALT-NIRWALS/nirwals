@@ -6,10 +6,11 @@ import astropy.io.fits as pyfits
 import numpy
 
 import matplotlib.pyplot as plt
+import logging
 
 dummycounter = 0
 
-def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False):
+def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False, even_odd=False):
 
     global dummycounter
     dummycounter += 1
@@ -33,7 +34,7 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
     bottom = data_rowsub[-4:-edge, :]
     ref_columns = numpy.vstack([top, bottom])
     if (debug):
-        print(ref_columns.shape)
+        print("ref-columns shape:", ref_columns.shape)
     n_rows = 8 - 2*edge
     n_amps = 32
     amp_size = ref_columns.shape[1] // n_amps
@@ -45,7 +46,7 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
     # take out the average intensity in each amplifier-block
     amp_blocks = ref_columns.T.reshape((n_amps, -1)) #.reshape((-1, n_amps))
     if (debug):
-        print("amp_blocks:", amp_blocks.shape)
+        print("amp_blocks shape:", amp_blocks.shape)
 
     # plt.imshow(ix[:, ::32])
     # plt.imshow(amp_blocks)
@@ -80,6 +81,19 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
 
     normalized_ref_columns = ref_columns - amp_background
 
+    if (not even_odd):
+        # we only correct for the bias level
+
+        print("normalized ref columns shape:", normalized_ref_columns.shape)
+        numpy.savetxt("norm_ref_columns.txt", normalized_ref_columns.T)
+        print("amp_background_2d shape", amp_background_2d.shape)
+
+        full_2d_correction = numpy.ones_like(data) * amp_background
+        print("full 2d corr shape", full_2d_correction.shape)
+        return full_2d_correction
+
+
+
     # reshape the ref columns to align pixels read out in parallel
     if (debug):
         print("every amp has %d pixels" % (amp_size))
@@ -112,6 +126,20 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
         print("2d correction:", ref_cols_correction_full_2d.shape)
 
     total_column_correction = ref_cols_correction_full + amp_background
+    if (debug):
+        print("total col correction shape:", total_column_correction.shape)
+        numpy.savetxt("total_column_corr.txt", total_column_correction[0,:])
+
+
+    # apply the column-wise correction to the full frame
+    image = data_rowsub - total_column_correction
+
+    if (debug):
+        pyfits.PrimaryHDU(data=image).writeto("del__totalcorrected.fits", overwrite=True)
+
+    full_2d_correction = row_wise + total_column_correction
+    if (debug):
+        print("full 2d:", full_2d_correction.shape)
 
     # combine
     if (debug):
@@ -124,19 +152,10 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
             pyfits.ImageHDU(data=ref_cols_2amps_flipped, name="DOUBLE_AMP_FLIPPED"),
             pyfits.ImageHDU(data=ref_cols_1amp, name="SINGLE_AMP"),
             pyfits.ImageHDU(data=ref_cols_correction_2amp, name="CORR_2AMP"),
-            pyfits.ImageHDU(data=ref_cols_correction_full_2d, name="CORR_2D")
+            pyfits.ImageHDU(data=ref_cols_correction_full_2d, name="CORR_2D"),
+            pyfits.ImageHDU(data=full_2d_correction, name="TOTAL_CORR"),
         ]).writeto("del__refcols.fits", overwrite=True)
 
-
-    # apply the column-wise correction to the full frame
-    image = data_rowsub - total_column_correction
-
-    if (debug):
-        pyfits.PrimaryHDU(data=image).writeto("del__totalcorrected.fits", overwrite=True)
-
-    full_2d_correction = row_wise + total_column_correction
-    if (debug):
-        print("full 2d:", full_2d_correction.shape)
 
     return full_2d_correction
 
@@ -150,7 +169,7 @@ if __name__ == "__main__":
     hdulist = pyfits.open(fn)
     data = hdulist[0].data
 
-    full_2d_correction = reference_pixels_to_background_correction(data)
+    full_2d_correction = reference_pixels_to_background_correction(data, debug=True, make_plots=True, even_odd=True)
 
     data = data - full_2d_correction
     hdulist[0].data = data
