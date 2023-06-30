@@ -109,6 +109,50 @@ def refpixel_yslope(data, edge=1, debug=False):
     return full_2d_correction
 
 
+def refpixel_blockyslope2(data, edge=1, debug=False):
+
+    # apply the usual first-order correction
+    blocky_full = refpixel_blockyslope(data, edge, debug)
+    temp_data = data - blocky_full
+
+    # figure out the column situation
+    top = temp_data[edge:4, :]
+    bottom = temp_data[-4:-edge, :]
+    ref_columns = numpy.vstack([top, bottom])
+    ref1d = numpy.mean(ref_columns, axis=0)
+    # ref1d = numpy.arange(ref1d.shape[0])
+    print("ref1d.shape", ref1d.shape)
+    numpy.savetxt("blocky_ref1d", ref1d)
+
+    amp_channels = ref1d.reshape((n_amps, -1))
+    pyfits.PrimaryHDU(data=amp_channels).writeto("amp_channels.fits", overwrite=True)
+    print("amp channels:", amp_channels.shape)
+    read_order_sorted = numpy.vstack([amp_channels[::2, :], amp_channels[1::2, ::-1]])
+    pyfits.PrimaryHDU(data=read_order_sorted).writeto("read_order_sorted.fits", overwrite=True)
+    horizontal_slopes = numpy.mean(read_order_sorted, axis=0)
+    print(horizontal_slopes.shape)
+    numpy.savetxt("blocky_horizontal", horizontal_slopes)
+
+    # add some smoothing to improve s/n
+    smooth_width = 12
+    pad_width = smooth_width // 2
+    cumsum_vec = numpy.cumsum(numpy.pad(horizontal_slopes, smooth_width, mode='reflect'))
+    ma_vec = (cumsum_vec[smooth_width:] - cumsum_vec[:-smooth_width]) / smooth_width
+    smoothed_slopes = ma_vec[pad_width:-pad_width]
+    numpy.savetxt("blocky_horizontal_smooth", smoothed_slopes)
+    print(horizontal_slopes.shape, smoothed_slopes.shape)
+
+    # unfold to match full width
+    p12 = numpy.hstack([horizontal_slopes, horizontal_slopes[::-1]])\
+         .reshape((1,-1)).repeat(n_amps//2, axis=0).reshape((1,-1))
+    pyfits.PrimaryHDU(data=p12).writeto("p12.fits", overwrite=True)
+    print("p12 shape", p12.shape)
+    numpy.savetxt("p12", p12.ravel())
+
+    complete_corr = blocky_full + p12
+    return complete_corr
+
+
 def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_plots=False, debug=False, mode='plain'):
 
     global dummycounter
@@ -137,6 +181,9 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
 
     elif (mode == 'yslope'):
         full_2d_correction = refpixel_yslope(data, edge, debug)
+
+    elif (mode == 'blockyslope2'):
+        full_2d_correction = refpixel_blockyslope2(data, edge, debug)
 
     else:
         print("This reference pixel correction mode (%s) is NOT understood/supported" % (mode))
