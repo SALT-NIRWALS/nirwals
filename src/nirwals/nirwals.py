@@ -1187,6 +1187,7 @@ class NIRWALS(object):
         # collect all output results
         _list = [pyfits.PrimaryHDU(header=self.ref_header)]
         if (flat4salt):
+            self.logger.info("Writing flattened version of output")
             # only write the reduced frame and nothing else
             try:
                 img = self.persistency_fit_global[:, :, 0]
@@ -1200,20 +1201,24 @@ class NIRWALS(object):
                 hdr['FIT_PERS'] = (False, "true persistency results")
             _list.append(hdu)
         else:
+            self.logger.info("Writing output in MEF format")
             _list.extend([
                 pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
                 pyfits.ImageHDU(data=self.noise_image, name='NOISE')
             ])
             try:
                 for i,extname in enumerate(persistency_values):
+                    self.logger.debug("Adding MEF extension: %s" % (extname))
                     _list.append(
                         pyfits.ImageHDU(
-                            data=rss.persistency_fit_global[i, :, :],
+                            data=self.persistency_fit_global[i, :, :],
                             name=extname)
                     )
-            except:
+            except Exception as e:
+                self.critical(str(e))
                 pass
 
+        self.logger.debug("Adding data provenance")
         _list.append(self.provenance.write_as_hdu())
 
         hdulist = pyfits.HDUList(_list)
