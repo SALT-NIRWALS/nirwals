@@ -60,17 +60,20 @@ def refpixel_blockyslope(data, edge=1, debug=False):
     blocky_top = numpy.mean(mean_top.reshape((n_amps, -1)), axis=1)
     blocky_bottom = numpy.mean(mean_bottom.reshape((n_amps, -1)), axis=1)
 
-    print(blocky_top.shape, blocky_bottom.shape)
-    numpy.savetxt("meantop", mean_top)
-    numpy.savetxt("meanbottom", mean_bottom)
-    numpy.savetxt("blockytop", blocky_top)
-    numpy.savetxt("blockybottom", blocky_bottom)
+    if (debug):
+        print(blocky_top.shape, blocky_bottom.shape)
+        numpy.savetxt("meantop", mean_top)
+        numpy.savetxt("meanbottom", mean_bottom)
+        numpy.savetxt("blockytop", blocky_top)
+        numpy.savetxt("blockybottom", blocky_bottom)
 
     slopes = (blocky_bottom - blocky_top) / (2048-edge-4)  # that's the number of pixels between top & bottom
-    print(slopes)
+    if (debug):
+        print(slopes)
 
     blocky_iy,_ = numpy.indices((data.shape[0],n_amps), dtype=float)
-    print("blocky_iy shape:", blocky_iy.shape)
+    if (debug):
+        print("blocky_iy shape:", blocky_iy.shape)
     blocky_corr = blocky_iy * slopes + blocky_top
 
 
@@ -121,17 +124,20 @@ def refpixel_blockyslope2(data, edge=1, debug=False):
     ref_columns = numpy.vstack([top, bottom])
     ref1d = numpy.mean(ref_columns, axis=0)
     # ref1d = numpy.arange(ref1d.shape[0])
-    print("ref1d.shape", ref1d.shape)
-    numpy.savetxt("blocky_ref1d", ref1d)
+    if (debug):
+        print("ref1d.shape", ref1d.shape)
+        numpy.savetxt("blocky_ref1d", ref1d)
 
     amp_channels = ref1d.reshape((n_amps, -1))
-    pyfits.PrimaryHDU(data=amp_channels).writeto("amp_channels.fits", overwrite=True)
-    print("amp channels:", amp_channels.shape)
     read_order_sorted = numpy.vstack([amp_channels[::2, :], amp_channels[1::2, ::-1]])
-    pyfits.PrimaryHDU(data=read_order_sorted).writeto("read_order_sorted.fits", overwrite=True)
     horizontal_slopes = numpy.mean(read_order_sorted, axis=0)
-    print(horizontal_slopes.shape)
-    numpy.savetxt("blocky_horizontal", horizontal_slopes)
+
+    if (debug):
+        pyfits.PrimaryHDU(data=amp_channels).writeto("amp_channels.fits", overwrite=True)
+        print("amp channels:", amp_channels.shape)
+        pyfits.PrimaryHDU(data=read_order_sorted).writeto("read_order_sorted.fits", overwrite=True)
+        print(horizontal_slopes.shape)
+        numpy.savetxt("blocky_horizontal", horizontal_slopes)
 
     # add some smoothing to improve s/n
     smooth_width = 12
@@ -139,15 +145,17 @@ def refpixel_blockyslope2(data, edge=1, debug=False):
     cumsum_vec = numpy.cumsum(numpy.pad(horizontal_slopes, smooth_width, mode='reflect'))
     ma_vec = (cumsum_vec[smooth_width:] - cumsum_vec[:-smooth_width]) / smooth_width
     smoothed_slopes = ma_vec[pad_width:-pad_width]
-    numpy.savetxt("blocky_horizontal_smooth", smoothed_slopes)
-    print(horizontal_slopes.shape, smoothed_slopes.shape)
+    if (debug):
+        numpy.savetxt("blocky_horizontal_smooth", smoothed_slopes)
+        print(horizontal_slopes.shape, smoothed_slopes.shape)
 
     # unfold to match full width
     p12 = numpy.hstack([horizontal_slopes, horizontal_slopes[::-1]])\
          .reshape((1,-1)).repeat(n_amps//2, axis=0).reshape((1,-1))
-    pyfits.PrimaryHDU(data=p12).writeto("p12.fits", overwrite=True)
-    print("p12 shape", p12.shape)
-    numpy.savetxt("p12", p12.ravel())
+    if (debug):
+        pyfits.PrimaryHDU(data=p12).writeto("p12.fits", overwrite=True)
+        print("p12 shape", p12.shape)
+        numpy.savetxt("p12", p12.ravel())
 
     complete_corr = blocky_full + p12
     return complete_corr
@@ -187,7 +195,7 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
 
     else:
         print("This reference pixel correction mode (%s) is NOT understood/supported" % (mode))
-        return 0
+        return 0.
 
     return full_2d_correction
 
