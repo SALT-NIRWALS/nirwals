@@ -250,15 +250,15 @@ def persistency_process_worker(
 
     # make the shared memory available as numpy arrays
     linearized_cube = numpy.ndarray(
-        shape=(n_frames,ny,nx), dtype=numpy.float32,
+        shape=(n_frames,ny,nx), dtype=float,
         buffer=shmem_linearized_cube.buf
     )
     differential_cube = numpy.ndarray(
-        shape=(n_frames, ny, nx), dtype=numpy.float32,
+        shape=(n_frames, ny, nx), dtype=float,
         buffer=shmem_differential_cube.buf
     )
     persistency_fit = numpy.ndarray(
-        shape=(n_persistency_values, ny, nx), dtype=numpy.float32,
+        shape=(n_persistency_values, ny, nx), dtype=float,
         buffer=shmem_persistency_fit.buf,
     )
 
@@ -371,7 +371,7 @@ def persistency_process_worker(
             if (x >380 and x<390 and row > 90 and row < 100):
                 print(x,row, full_fit_mask[x], )
                 numpy.savetxt("dump___x=%d_y=%d.txt" % (x,row),
-                      numpy.array([diff_reads, raw_reads, good_data.astype(numpy.int),
+                      numpy.array([diff_reads, raw_reads, good_data.astype(int),
                                    numpy.ones_like(diff_reads)*linebuffer[0,x]]).T)
 
         # end of loop over all pixels in this row
@@ -547,7 +547,7 @@ class NIRWALS(object):
 
         self.image_stack_raw = numpy.full(
             (self.n_reads, self.n_groups, self.ny, self.nx),
-            fill_value=numpy.NaN, dtype=numpy.float32)
+            fill_value=numpy.NaN, dtype=float)
         self.raw_read_times = numpy.full((self.n_reads, self.n_groups), fill_value=numpy.NaN)
 
         self.logger.debug("raw image cube dimensions: %s" % (str(self.image_stack_raw.shape)))
@@ -557,7 +557,7 @@ class NIRWALS(object):
             try:
                 hdulist = pyfits.open(fn)
                 hdr = hdulist[0].header
-                imgdata = hdulist[0].data.astype(numpy.float32)
+                imgdata = hdulist[0].data.astype(float)
             except Exception as e:
                 self.logger.error("Unable to open %s (%s)" % (fn, str(e)))
                 continue
@@ -624,7 +624,7 @@ class NIRWALS(object):
             return
 
 
-#         self.image_stack = numpy.array(self._image_stack, dtype=numpy.float32)
+#         self.image_stack = numpy.array(self._image_stack, dtype=float)
 
         # self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
 
@@ -663,7 +663,7 @@ class NIRWALS(object):
             # TODO: CHECK THAT THIS IS CORRECT
             # perform a dark subtraction;
             # dark-current = rate [in cts/sec] * frame-# * exposure-time per frame [in sec]
-            self.dark_cube = (numpy.arange(linearized.shape[0], dtype=numpy.float).reshape((-1, 1, 1)) + 1) \
+            self.dark_cube = (numpy.arange(linearized.shape[0], dtype=float).reshape((-1, 1, 1)) + 1) \
                         * self.diff_exptime \
                         * dark.reshape((1, dark.shape[0], dark.shape[1]))
             self.logger.debug("shape of dark cube: %s" % (self.dark_cube.shape))
@@ -776,7 +776,7 @@ class NIRWALS(object):
             create=True, size=linearized.nbytes
         )
         self.linearized_cube = numpy.ndarray(
-            shape=linearized.shape, dtype=numpy.float32,
+            shape=linearized.shape, dtype=float,
             buffer=self.shmem_linearized_cube.buf
         )
         self.linearized_cube[:,:,:] = linearized[:,:,:]
@@ -784,13 +784,12 @@ class NIRWALS(object):
 
         # also initialize a 16-bit mask frame to hold some more info about the data results
         self.logger.debug("Allocating memory for the output mask frame")
-        mask_dtype = numpy.int16
-        _mask = numpy.zeros((self.ny, self.nx), dtype=mask_dtype)
+        _mask = numpy.zeros((self.ny, self.nx), dtype=int)
         self.shmem_image_mask = multiprocessing.shared_memory.SharedMemory(
             create=True, size=_mask.nbytes
         )
         self.image_mask = numpy.ndarray(
-            shape=(self.ny, self.nx), dtype=mask_dtype,
+            shape=(self.ny, self.nx), dtype=int,
             buffer=self.shmem_image_mask.buf
         )
         self.image_mask[:,:] = 0
@@ -806,7 +805,7 @@ class NIRWALS(object):
             create=True, size=self.linearized_cube.nbytes
         )
         self.differential_cube = numpy.ndarray(
-            shape=self.linearized_cube.shape, dtype=numpy.float32,
+            shape=self.linearized_cube.shape, dtype=float,
             buffer=self.shmem_differential_cube.buf,
         )
         self.logger.debug("differential cube allocated")
@@ -1227,7 +1226,7 @@ class NIRWALS(object):
             create=True, size=n_persistency_values*self.nx*self.ny*4,
         )
         self.persistency_fit_global = numpy.ndarray(
-            shape=(n_persistency_values, self.ny, self.ny), dtype=numpy.float32,
+            shape=(n_persistency_values, self.ny, self.ny), dtype=float,
             buffer=self.shmem_persistency_fit_global.buf,
         )
         self.persistency_fit_global[:,:,:] = numpy.NaN
@@ -1630,7 +1629,7 @@ class NIRWALS(object):
 
         pinit = [1., 0.] #, 1.]
 
-        readout_times = numpy.arange(series.shape[0], dtype=numpy.float) * self.diff_exptime
+        readout_times = numpy.arange(series.shape[0], dtype=float) * self.diff_exptime
         img_time = readout_times[~bad_data]
         img_flux = series[~bad_data]
 
