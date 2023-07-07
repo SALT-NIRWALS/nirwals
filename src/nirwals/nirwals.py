@@ -372,7 +372,7 @@ def persistency_process_worker(
             if (x >380 and x<390 and row > 90 and row < 100):
                 print(x,row, full_fit_mask[x], )
                 numpy.savetxt("dump___x=%d_y=%d.txt" % (x,row),
-                      numpy.array([diff_reads, raw_reads, good_data.astype(numpy.int),
+                      numpy.array([diff_reads, raw_reads, good_data.astype(int),
                                    numpy.ones_like(diff_reads)*linebuffer[0,x]]).T)
 
         # end of loop over all pixels in this row
@@ -664,7 +664,7 @@ class NIRWALS(object):
             # TODO: CHECK THAT THIS IS CORRECT
             # perform a dark subtraction;
             # dark-current = rate [in cts/sec] * frame-# * exposure-time per frame [in sec]
-            self.dark_cube = (numpy.arange(linearized.shape[0], dtype=numpy.float).reshape((-1, 1, 1)) + 1) \
+            self.dark_cube = (numpy.arange(linearized.shape[0], dtype=float).reshape((-1, 1, 1)) + 1) \
                         * self.diff_exptime \
                         * dark.reshape((1, dark.shape[0], dark.shape[1]))
             self.logger.debug("shape of dark cube: %s" % (self.dark_cube.shape))
@@ -1637,7 +1637,7 @@ class NIRWALS(object):
 
         pinit = [1., 0.] #, 1.]
 
-        readout_times = numpy.arange(series.shape[0], dtype=numpy.float) * self.diff_exptime
+        readout_times = numpy.arange(series.shape[0], dtype=float) * self.diff_exptime
         img_time = readout_times[~bad_data]
         img_flux = series[~bad_data]
 
