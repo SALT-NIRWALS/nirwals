@@ -63,8 +63,8 @@ if __name__ == "__main__":
                          help="write intermediate process data [default: NO]")
     cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
                          help="generate debug plots for all pixels with persistency [default: NO]")
-    cmdline.add_argument("--refpixel", dest="use_ref_pixels", default=False, action='store_true',
-                         help="use reference pixels [default: NO]")
+    cmdline.add_argument("--refpixel", dest="ref_pixel_mode", default='none',
+                         help="reference pixels mode [default: NO]")
     cmdline.add_argument("--flat4salt", dest="write_flat_for_salt", default=False, action='store_true',
                          help="write a flat, 1-extension FITS file for SALT")
     cmdline.add_argument("files", nargs="+",
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         # fn = sys.argv[1]
 
         rss = NIRWALS(fn, max_number_files=args.max_number_files,
-                      use_reference_pixels=args.use_ref_pixels,
+                      use_reference_pixels=args.ref_pixel_mode,
                       saturation=args.saturation,
                       )
 
