@@ -25,6 +25,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from .provenance import DataProvenance
+from .refpixel_calibrate import  reference_pixels_to_background_correction
 
 import astropy
 print(astropy.__path__)
@@ -414,7 +415,7 @@ class NIRWALS(object):
                  saturation=None,
                  saturation_level=62000,
                  saturation_fraction=0.25, saturation_percentile=95,
-                 use_reference_pixels=True,
+                 use_reference_pixels='none',
                  mask_saturated_pixels=False):
 
         self.fn = fn
@@ -742,21 +743,22 @@ class NIRWALS(object):
         self.reference_corrections_cube = numpy.full_like(self.image_stack, fill_value=0.)
 
         reset_frame_subtracted = self.image_stack.copy()
-        if (self.use_reference_pixels):
-            self.logger.info("Applying reference pixel corrections")
-            for frame_id in range(self.image_stack.shape[0]):
-                reference_pixel_correction = rss_refpixel_calibrate.reference_pixels_to_background_correction(
-                    self.image_stack[frame_id], debug=False,
-                )
-                self.reference_corrections_cube[frame_id] = reference_pixel_correction
-                reset_frame_subtracted[frame_id] -= reference_pixel_correction
-        else:
-            self.logger.info("Subtracting first read from stack")
-            # self.subtract_first_read()
-            # apply first-read subtraction
-            self.reset_frame = self.image_stack[0]
-            self.reference_corrections_cube[:] = self.reset_frame.reshape((-1, self.ny, self.nx))
-            # reset_frame_subtracted = self.image_stack - self.reset_frame
+        # if (self.use_reference_pixels != 'none'):
+        self.logger.info("Applying reference pixel corrections [%s]" % (self.use_reference_pixels))
+        for frame_id in range(self.image_stack.shape[0]):
+            reference_pixel_correction = reference_pixels_to_background_correction(
+                self.image_stack[frame_id], debug=False, mode=self.use_reference_pixels,
+            )
+            self.reference_corrections_cube[frame_id] = reference_pixel_correction
+            reset_frame_subtracted[frame_id] -= reference_pixel_correction
+
+        # else:
+        #     self.logger.info("Subtracting first read from stack")
+        #     # self.subtract_first_read()
+        #     # apply first-read subtraction
+        #     self.reset_frame = self.image_stack[0]
+        #     self.reference_corrections_cube[:] = self.reset_frame.reshape((-1, self.ny, self.nx))
+        #     # reset_frame_subtracted = self.image_stack - self.reset_frame
 
         # print(self.read_times)
         self.logger.info("Typical interval between reads: %.3f seconds" % (
