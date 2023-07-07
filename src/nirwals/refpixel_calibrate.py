@@ -180,6 +180,9 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
     # if (debug):
     #     pyfits.PrimaryHDU(data=data_rowsub).writeto("del__rowsub_%d.fits" % (dummycounter), overwrite=True)
 
+    if (mode == 'none'):
+        return 0.
+
     if (mode == 'plain'):
         full_2d_correction = refpixel_plain(data, edge, debug)
 
