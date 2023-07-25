@@ -650,10 +650,10 @@ class NIRWALS(object):
         self.nx = self.ref_header['XSTOP'] - self.ref_header['XSTART'] + 1
         self.ny = self.ref_header['YSTOP'] - self.ref_header['YSTART'] + 1
 
-        # readout settings
+        # readout settings -- FOR NOW NO MULTIPLE READS/RAMPS SUPPORTED IN A SINGLE SEQUENCE
         self.n_groups = self.ref_header['NGROUPS']
-        self.n_ramps = self.ref_header['NRAMPS']
-        self.n_reads = self.ref_header['NREADS']
+        self.n_ramps = 1 #self.ref_header['NRAMPS']
+        self.n_reads = 1 #self.ref_header['NREADS']
         self.n_outputs = self.ref_header['NOUTPUTS']
         self.gain = self.ref_header['GAIN']
 
@@ -705,12 +705,12 @@ class NIRWALS(object):
             self.n_groups = max_number_files
             print("Limiting input data to %d read-groups" % (max_number_files))
 
-        self.image_stack_raw = numpy.full(
-            (self.n_reads, self.n_groups, self.ny, self.nx),
-            fill_value=numpy.NaN, dtype=numpy.float32)
-        self.raw_read_times = numpy.full((self.n_reads, self.n_groups), fill_value=numpy.NaN)
+        # self.image_stack_raw = numpy.full(
+        #     (self.n_reads, self.n_groups, self.ny, self.nx),
+        #     fill_value=numpy.NaN, dtype=numpy.float32)
+        self.raw_read_times = numpy.full((self.n_groups), fill_value=numpy.NaN)
 
-        self.logger.debug("raw image cube dimensions: %s" % (str(self.image_stack_raw.shape)))
+        self.logger.debug("raw image cube dimensions: %s" % (str(self.cube_raw.shape)))
 
         # TODO: Add proper handling for combined Fowler and up-the-ramp sampling
         for fn in _filelist:
@@ -750,11 +750,13 @@ class NIRWALS(object):
                 imgdata[saturation_mask] = numpy.Inf
 
 
-            self.raw_read_times[img_read-1, img_group-1] = img_exptime
+            self.raw_read_times[img_group-1] = img_exptime
             # self.logger.debug("raw read times: %s" % (str(self.raw_read_times)))
 
-            self.image_stack_raw[img_read-1, img_group-1, :, :] = imgdata
+            # self.image_stack_raw[img_read-1, img_group-1, :, :] = imgdata
 
+
+            self.cube_raw[img_group-1, :, :] = imgdata
 
 
             # self._image_stack.append(imgdata)
@@ -767,28 +769,34 @@ class NIRWALS(object):
         self.logger.info("#groups=%d // #ramps=%d // #reads=%d" % (self.n_groups, self.n_ramps, self.n_reads))
         if (self.n_groups == 1 and self.n_reads >= 1):
             # this is a plain fowler mode, so calculate pair-wise differences
-            self.logger.info("Using fowler-sampling strategy")
-            self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
-            print("@@@@@@@@@@@@@", self.image_stack.shape)
-            self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
+            self.logger.critical("FOWLER MODE NOT SUPPORTED, NEED N_GROUPS>1 AND N_READS==1")
+            # self.logger.info("Using fowler-sampling strategy")
+            # self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
+            # print("@@@@@@@@@@@@@", self.image_stack.shape)
+            # self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
+            return
 
         elif (self.n_groups > 1):
             # up-the-ramp sampling.
             self.logger.info("Using up-the-ramp strategy")
-            self.image_stack = numpy.nanmean(self.image_stack_raw, axis=0)
-            print(self.raw_read_times)
-            self.read_times = numpy.nanmean(self.raw_read_times, axis=0)
+            # self.image_stack = numpy.nanmean(self.image_stack_raw, axis=0)
+            # print(self.raw_read_times)
+            self.read_times = self.raw_read_times #numpy.nanmean(self.raw_read_times, axis=0)
 
         else:
             self.logger.critical("No idea what's going here and what to do with this data - HELP!!!!")
             return
 
-        self.logger.debug("stack before/after: %s --> %s" % (str(self.image_stack_raw.shape), str(self.image_stack.shape)))
+        # self.logger.debug("stack before/after: %s --> %s" % (str(self.image_stack_raw.shape), str(self.image_stack.shape)))
         self.logger.debug("read-times: %s" % (str(self.read_times)))
-        self.logger.debug("stack shape: %s" % (str(self.image_stack.shape)))
+        self.logger.debug("stack shape: %s" % (str(self.cube_raw.shape)))
+
+        #
+        # Now also load the nonlinearity corrections from file into shared memory
+        #
 
         # delete raw stack to clean up memory
-        del self.image_stack_raw
+        # del self.image_stack_raw
 
         self.image_stack_initialized = True
     def apply_dark_correction(self, dark_fn, dark_mode="differential"):
@@ -890,17 +898,18 @@ class NIRWALS(object):
 
         # pyfits.PrimaryHDU(data=self.image_stack).writeto("raw_stack_dmp.fits", overwrite=True)
 
-        self.reference_corrections_cube = numpy.full_like(self.image_stack, fill_value=0.)
+        # self.reference_corrections_cube = numpy.full_like(self.image_stack, fill_value=0.)
 
-        reset_frame_subtracted = self.image_stack.copy()
+        # reset_frame_subtracted = self.image_stack.copy()
         # if (self.use_reference_pixels != 'none'):
         self.logger.info("Applying reference pixel corrections [%s]" % (self.use_reference_pixels))
-        for frame_id in range(self.image_stack.shape[0]):
-            reference_pixel_correction = reference_pixels_to_background_correction(
-                self.image_stack[frame_id], debug=False, mode=self.use_reference_pixels,
-            )
-            self.reference_corrections_cube[frame_id] = reference_pixel_correction
-            reset_frame_subtracted[frame_id] -= reference_pixel_correction
+        self.apply_nonlinearity_corrections()
+        # for frame_id in range(self.image_stack.shape[0]):
+        #     reference_pixel_correction = reference_pixels_to_background_correction(
+        #         self.image_stack[frame_id], debug=False, mode=self.use_reference_pixels,
+        #     )
+        #     self.reference_corrections_cube[frame_id] = reference_pixel_correction
+        #     reset_frame_subtracted[frame_id] -= reference_pixel_correction
 
         # else:
         #     self.logger.info("Subtracting first read from stack")
