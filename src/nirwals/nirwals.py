@@ -479,6 +479,7 @@ def worker__reference_pixel_correction(
     """
 
     logger = logging.getLogger(workername if workername is not None else "RefPixelWorker")
+    logger.info("Starting worker")
 
     cube_raw = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
                              buffer=shmem_cube_raw.buf)
@@ -492,10 +493,26 @@ def worker__reference_pixel_correction(
                 # this is the termination signal
                 jobqueue.task_done()
                 break
-        except queue.Empty:
+        except queue.Empty as e:
+            logger.warning("job queue empty (%s)" % (e))
             break
 
-        # do work here
+        slice = job
+        logger.debug("Starting reference pixel correction for slice/read %d" % (slice))
+
+        t1 = time.time()
+        # get correction from data
+        data = cube_raw[slice, :, :]
+        corr_image = reference_pixels_to_background_correction(
+            data=data,
+            edge=1,
+            mode=refpixel_mode,
+            verbose=False, make_plots=False, debug=False)
+
+        # write results to output shared memory
+        cube_corrected[slice, :, :] = data - corr_image
+        t2 = time.time()
+        logger.debug("Correction for read %d done after %.3f seconds" % (slice, t2-t1))
 
         jobqueue.task_done()
 
@@ -889,12 +906,51 @@ class NIRWALS(object):
         return
     def apply_reference_pixel_corrections(self):
 
+        n_reads = self.cube_raw.shape[0]
+
+        # prepare jobs for each worker
+        self.logger.info("Preparing jobs for ref pixel correction workers")
+        slice_queue = multiprocessing.JoinableQueue()
+        for slice in range(n_reads):
+            slice_queue.put(slice)
+
+        # start workers (as many as requested, but not more than jobs available)
+        self.logger.info("Starting ref pixel workers")
+        n_workers = numpy.min([self.n_cores, n_reads])
+        worker_processes = []
+        for n in range(n_workers):
+            p = multiprocessing.Process(
+                target=worker__reference_pixel_correction,
+                kwargs=dict(
+                    shmem_cube_raw=self.shmem_cube_raw,
+                    shmem_cube_corrected=self.shmem_cube_linearized,
+                    cube_shape=self.cube_raw.shape,
+                    refpixel_mode=self.use_reference_pixels,
+                    jobqueue=slice_queue,
+                    workername='RefPixelWorker_%03d' % (n+1)
+                ),
+                daemon=True
+            )
+            slice_queue.put(None)
+            p.start()
+            worker_processes.append(p)
+
+        # wait for work to be completed
+        self.logger.info("Waiting for ref pixel work to be done")
+        slice_queue.join()
+
+        # make sure all workers are shut down
+        for p in worker_processes:
+            p.join()
+
+        self.logger.info("All ref pixel correction work complete")
 
         pass
 
     def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None, mask_saturated_pixels=False):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
+        self.logger.info("Done loading all files")
 
         # pyfits.PrimaryHDU(data=self.image_stack).writeto("raw_stack_dmp.fits", overwrite=True)
 
@@ -903,7 +959,15 @@ class NIRWALS(object):
         # reset_frame_subtracted = self.image_stack.copy()
         # if (self.use_reference_pixels != 'none'):
         self.logger.info("Applying reference pixel corrections [%s]" % (self.use_reference_pixels))
-        self.apply_nonlinearity_corrections()
+        self.apply_reference_pixel_corrections()
+        # self.apply_nonlinearity_corrections()
+
+        self.logger.info("Dumping corrected datacube to file")
+        pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
+
+        time.sleep(1)
+        return
+
         # for frame_id in range(self.image_stack.shape[0]):
         #     reference_pixel_correction = reference_pixels_to_background_correction(
         #         self.image_stack[frame_id], debug=False, mode=self.use_reference_pixels,
