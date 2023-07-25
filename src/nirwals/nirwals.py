@@ -475,6 +475,8 @@ class NIRWALS(object):
                  saturation_fraction=0.25, saturation_percentile=95,
                  use_reference_pixels='none',
                  mask_saturated_pixels=False,
+                 nonlinearity=None,
+                 n_cores=0,
                  logger_name=None):
 
         self.fn = fn
@@ -488,8 +490,9 @@ class NIRWALS(object):
         self.first_header = None
         self.saturation_frame = None
 
-        self.nonlin_fn = None
+        self.nonlin_fn = nonlinearity
         self.nonlinearity_cube = None
+        self.nonlinearity_polyorder = -1
 
         self.alloc_persistency = False
 
@@ -528,6 +531,21 @@ class NIRWALS(object):
         self.get_full_filelist()
         self.allocate_shared_memory()
 
+    def nonlinearity_valid(self):
+        if (self.nonlin_fn is None or not os.path.isfile(self.nonlin_fn)):
+            return False
+        try:
+            hdu = pyfits.open(self.nonlin_fn)
+            data = hdu[0].data
+            if (data is not None and data.ndim == 3 and data.shape[1]==self.ny and data.shape[2]==self.nx):
+                polyorder = hdu[0].data.shape[0] - 1
+                self.logger.info("Found valid non-linearity correction cube, order %d, in %s" % (polyorder, self.nonlin_fn))
+                self.nonlinearity_polyorder = polyorder
+                return True
+        except:
+            pass
+        return False
+
     def allocate_shared_memory(self):
         """
         Pre-allocate shared memory for all datacubes to miniminze RAM footprint as much as possible, while
@@ -560,6 +578,20 @@ class NIRWALS(object):
         self.cube_linearized = numpy.ndarray(shape=cube_shape, dtype=numpy.float32, buffer=self.shmem_cube_linearized.buf)
         self.cube_linearized[:, :, :] = 0.
 
+        # Add place-holders for the nonlinearity corrections, to be read later
+        self.shmem_cube_nonlinearity = None
+        self.cube_nonlinearity = None
+        if (self.nonlinearity_valid()):
+            nonlin_shape = (self.nonlinearity_polyorder, self.ny, self.nx)
+            n_pixels_nonlinearity = self.nonlinearity_polyorder * self.ny * self.nx
+            self.logger.info("Allocating shared memory: linearized cube")
+            self.shmem_cube_nonlinearity = multiprocessing.shared_memory.SharedMemory(
+                name='nonlinearity_corrections', create=True,
+                size=(dummy.itemsize * n_pixels_nonlinearity),
+            )
+            self.cube_nonlinearity = numpy.ndarray(shape=nonlin_shape, dtype=numpy.float32, buffer=self.shmem_cube_nonlinearity.buf)
+            self.cube_nonlinearity[:, :, :] = 0.
+            self.logger.debug("shared meory for nonlinearity corrections initialized")
 
 
     def read_exposure_setup(self):
