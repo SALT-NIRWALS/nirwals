@@ -17,6 +17,7 @@ import itertools
 import multiprocessing
 import multiprocessing.shared_memory
 import argparse
+import time
 
 from astropy import log
 log.setLevel('ERROR')
@@ -404,6 +405,63 @@ dump_options = [
     'ngoodpixels',
 ]
 
+
+def fit_pairwise_slope(times, reads, noise, good_reads=None, plot=False, permplot=True, plottitle=None):
+    if (good_reads is None):
+        good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0)
+
+    times = times[good_reads]
+    reads = reads[good_reads]
+    noise = noise[good_reads]
+
+    # time differences between reads
+    dt = times.reshape((-1, 1)) - times.reshape((1, -1))
+    df = reads.reshape((-1, 1)) - reads.reshape((1, -1))
+    d_noise = noise.reshape((-1, 1)) + noise.reshape((1, -1))
+
+    useful_pairs = (dt > 0) & numpy.isfinite(df)
+    rates = (df / dt)[useful_pairs]
+    noises = d_noise[useful_pairs]
+    #     print(rates.shape)
+
+    try:
+        good = numpy.isfinite(rates)
+        for it in range(3):
+            _stats = numpy.nanpercentile(rates[good], [16, 50, 84])
+            _med = _stats[1]
+            _sigma = 0.5 * (_stats[2] - _stats[0])
+            good = good & (rates > _med - 3 * _sigma) & (rates < _med + 3 * _sigma)
+
+        weights = 1. / noises
+        weighted = numpy.sum((rates * weights)[good]) / numpy.sum(weights[good])
+    except Exception as e:
+        weighted,_med,_sigma = numpy.NaN, numpy.NaN, numpy.NaN
+
+    if (plot):
+        fig, ax = plt.subplots(tight_layout=True)
+        if (permplot):
+            perm = numpy.random.permutation(rates.shape[0])
+        else:
+            perm = numpy.arange(rates.shape[0])
+        ax.scatter(numpy.arange(rates.shape[0])[perm][good], rates[good], s=0.5, alpha=.2)
+        ax.scatter(numpy.arange(rates.shape[0])[perm][~good], rates[~good], s=0.3, c='red')
+        ax.axhline(y=_med)
+        ax.axhline(y=_med - _sigma, c='grey')
+        ax.axhline(y=_med + _sigma, c='grey')
+        ax.axhline(y=bestfit[0], c='orange')
+        ax.set_ylim((_med - 10 * _sigma, _med + 10 * _sigma))
+        ax.set_title("median/sigma: %.3f +/- %.3f    weighted: %.3f" % (_med, _sigma, weighted))
+        if (plottitle is not None):
+            fig.suptitle(plottitle)
+
+    return dict(
+        weighted=weighted,
+        median=_med,
+        sigma=_sigma
+    )
+
+
+
 class NIRWALS(object):
 
     mask_SATURATED = 0x0001
@@ -417,7 +475,6 @@ class NIRWALS(object):
                  saturation_fraction=0.25, saturation_percentile=95,
                  use_reference_pixels='none',
                  mask_saturated_pixels=False):
-
         self.fn = fn
         self.filelist = []
         self.logger = logging.getLogger("RSS")
@@ -467,7 +524,6 @@ class NIRWALS(object):
         self.read_exposure_setup()
 
         self.get_full_filelist()
-
     def read_exposure_setup(self):
         if (self.fn is None):
             self.logger.critical("Unable to get exposure setup without valid input filename")
@@ -491,8 +547,6 @@ class NIRWALS(object):
         # exposure and other times
         self.exptime = self.ref_header['USEREXP'] / 1000.
         self.diff_exptime = self.exptime / self.n_groups
-
-
     def get_full_filelist(self):
         # get basedir
         fullpath = os.path.abspath(self.fn)
@@ -514,17 +568,8 @@ class NIRWALS(object):
         self.logger.debug("Loading filelist:\n"+"\n -- ".join(self.filelist))
 
         return
-
     def add_file(self, filename):
         return
-
-    # def store_header_info(self, hdr):
-    #     self.first_header = hdr
-    #
-    #     self.exptime = hdr['USEREXP'] / 1000.
-    #     self.n_groups = hdr['NGROUPS']
-    #     self.diff_exptime = self.exptime / self.n_groups
-
     def load_all_files(self, max_number_files=None, mask_saturated_pixels=True):
 
         if (max_number_files is None):
@@ -639,7 +684,6 @@ class NIRWALS(object):
         del self.image_stack_raw
 
         self.image_stack_initialized = True
-
     def apply_dark_correction(self, dark_fn, dark_mode="differential"):
 
         self.dark_cube = numpy.zeros_like(self.linearized_cube)
@@ -706,10 +750,6 @@ class NIRWALS(object):
             # pyfits.PrimaryHDU(data=self.differential_cube).writeto("darkcorrect_after.fits", overwrite=True)
 
         return
-
-
-
-
     def dump_data(self, data, fn, datatype="?_default_?", extname=None):
         self.logger.debug("Writing %s to %s" % (datatype, fn))
 
@@ -732,8 +772,6 @@ class NIRWALS(object):
         hdulist.writeto(fn, overwrite=True)
 
         return
-
-
     def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None, mask_saturated_pixels=False):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
@@ -800,73 +838,95 @@ class NIRWALS(object):
         # TODO: Add flexibility to have darks either in linear or differential mode
         # for now let's simplify things and assume differential mode only
 
-        # allocate shared memory for the differential stack and calculate from
-        # the linearized cube
-        # calculate differential stack
-        self.logger.debug("Allocating shared memory for differential cube")
-        self.shmem_differential_cube = multiprocessing.shared_memory.SharedMemory(
-            create=True, size=self.linearized_cube.nbytes
-        )
-        self.differential_cube = numpy.ndarray(
-            shape=self.linearized_cube.shape, dtype=numpy.float32,
-            buffer=self.shmem_differential_cube.buf,
-        )
-        self.logger.debug("differential cube allocated")
+        # # allocate shared memory for the differential stack and calculate from
+        # # the linearized cube
+        # # calculate differential stack
+        # self.logger.debug("Allocating shared memory for differential cube")
+        # self.shmem_differential_cube = multiprocessing.shared_memory.SharedMemory(
+        #     create=True, size=self.linearized_cube.nbytes
+        # )
+        # self.differential_cube = numpy.ndarray(
+        #     shape=self.linearized_cube.shape, dtype=numpy.float32,
+        #     buffer=self.shmem_differential_cube.buf,
+        # )
+        # self.logger.debug("differential cube allocated")
+        #
+        # self.logger.debug("calculating differential cube")
+        # self.differential_read_times = numpy.pad(numpy.diff(self.read_times), (1,0))
+        # self.differential_cube[:, :, :] = numpy.pad(
+        #     numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))
+        # ) / self.differential_read_times.reshape((-1,1,1))
+        # self.logger.debug("diff stack: %s" % (str(self.differential_cube.shape)))
+        #
+        # self.logger.info("Next up (maybe): dark correction")
+        # self.apply_dark_correction(dark_fn)
+        #
+        # # mask out all saturated and/or otherwise bad samples
+        # max_count_rates = -1000 # TODO: FIX THIS numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
+        # # print("max counrates:", max_count_rates.shape)
+        #
+        # # TODO: implement full iterative outlier rejection here
+        # if (mask_bad_data is None):
+        #     mask_bad_data = self.mask_BAD_DARK | self.mask_SATURATED | self.mask_LOW_RATE | self.mask_NEGATIVE
+        # self.logger.info("Identifying bad/dead/saturated/negative pixels (0x%02x)" % (mask_bad_data))
+        # bad_data = numpy.zeros_like(self.image_stack, dtype=bool)
+        # if (mask_bad_data is not None and (mask_bad_data & self.mask_SATURATED) > 0):
+        #     bad_data = bad_data | (self.image_stack > self.saturation_level)
+        # if (mask_bad_data is not None and (mask_bad_data & self.mask_LOW_RATE) > 0):
+        #     bad_data = bad_data | (self.differential_cube < self.saturation_fraction * max_count_rates)
+        # # if (mask_bad_data is not None and (mask_bad_data & self.mask_BAD_DARK) > 0):
+        # #     bad_data = bad_data | (self.dark_cube >= linearized)
+        # # if (mask_bad_data is not None and (mask_bad_data & self.mask_NEGATIVE) > 0):
+        #     bad_data = bad_data | (linearized < 0)
+        #
+        # self.bad_data_mask = bad_data
+        #
+        # # bad_data = (self.image_stack > self.saturation_level) | \
+        # #            (self.differential_stack < self.saturation_fraction*max_count_rates) | \
+        # #            (dark_cube >= linearized) | \
+        # #            (linearized < 0)
+        #
+        # self.logger.info("Cleaning image cube")
+        # self.clean_stack = self.differential_cube.copy()
+        # self.clean_stack[bad_data] = numpy.NaN
+        # self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
+        # # pyfits.PrimaryHDU(data=self.clean_stack).writeto("darkcorrect___cleanstack.fits", overwrite=True)
+        #
+        # # calculate a average countrate image
+        # self.logger.info("calculating final image from stack")
+        # # image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
+        # self.reduced_image_plain = numpy.nanmean(self.clean_stack, axis=0)
+        # noise = numpy.sqrt(self.image_stack)
+        # # pyfits.PrimaryHDU(data=noise).writeto("darkcorrect___noise.fits", overwrite=True)
+        # noise[bad_data] = numpy.NaN
+        # noise[0, :, :] = numpy.NaN
+        # self.inv_noise = numpy.nansum(1./noise, axis=0)
+        # self.weighted_mean = numpy.nanmean(self.clean_stack, axis=0) # numpy.nansum(self.clean_stack / noise, axis=0) / self.inv_noise
+        # self.noise_image = 1. / self.inv_noise
+        # # print(image.shape)
 
-        self.logger.debug("calculating differential cube")
-        self.differential_read_times = numpy.pad(numpy.diff(self.read_times), (1,0))
-        self.differential_cube[:, :, :] = numpy.pad(
-            numpy.diff(linearized, axis=0), ((1,0),(0,0),(0,0))
-        ) / self.differential_read_times.reshape((-1,1,1))
-        self.logger.debug("diff stack: %s" % (str(self.differential_cube.shape)))
+        self.weighted_mean = numpy.zeros((2048,2048))
+        self.noise_image = numpy.zeros((2048,2048))
+        self.median_image = numpy.zeros((2048,2048))
+        readnoise = 20
+        for y in range(2048):
+            self.logger.info("Reconstructing image,y=%d" % (y))
+            for x in range(2048):
+                raw_reads = self.linearized_cube[:,y,x]
+                result = fit_pairwise_slope(
+                    times=self.read_times,
+                    reads=raw_reads,
+                    noise=numpy.sqrt(numpy.fabs(raw_reads) + readnoise**2),
+                    good_reads=None,
+                    plot=False
+                )
+                self.weighted_mean[y,x] = result['weighted']
+                self.noise_image[y,x] = result['sigma']
+                self.median_image[y,x] = result['median']
 
-        self.logger.info("Next up (maybe): dark correction")
-        self.apply_dark_correction(dark_fn)
-
-        # mask out all saturated and/or otherwise bad samples
-        max_count_rates = -1000 # TODO: FIX THIS numpy.nanpercentile(self.differential_stack, q=self.saturation_percentile, axis=0)
-        # print("max counrates:", max_count_rates.shape)
-
-        # TODO: implement full iterative outlier rejection here
-        if (mask_bad_data is None):
-            mask_bad_data = self.mask_BAD_DARK | self.mask_SATURATED | self.mask_LOW_RATE | self.mask_NEGATIVE
-        self.logger.info("Identifying bad/dead/saturated/negative pixels (0x%02x)" % (mask_bad_data))
-        bad_data = numpy.zeros_like(self.image_stack, dtype=bool)
-        if (mask_bad_data is not None and (mask_bad_data & self.mask_SATURATED) > 0):
-            bad_data = bad_data | (self.image_stack > self.saturation_level)
-        if (mask_bad_data is not None and (mask_bad_data & self.mask_LOW_RATE) > 0):
-            bad_data = bad_data | (self.differential_cube < self.saturation_fraction * max_count_rates)
-        # if (mask_bad_data is not None and (mask_bad_data & self.mask_BAD_DARK) > 0):
-        #     bad_data = bad_data | (self.dark_cube >= linearized)
-        # if (mask_bad_data is not None and (mask_bad_data & self.mask_NEGATIVE) > 0):
-            bad_data = bad_data | (linearized < 0)
-
-        self.bad_data_mask = bad_data
-
-        # bad_data = (self.image_stack > self.saturation_level) | \
-        #            (self.differential_stack < self.saturation_fraction*max_count_rates) | \
-        #            (dark_cube >= linearized) | \
-        #            (linearized < 0)
-
-        self.logger.info("Cleaning image cube")
-        self.clean_stack = self.differential_cube.copy()
-        self.clean_stack[bad_data] = numpy.NaN
-        self.clean_stack[0, :, :] = numpy.NaN # mask out the first slice, which is just padding
-        # pyfits.PrimaryHDU(data=self.clean_stack).writeto("darkcorrect___cleanstack.fits", overwrite=True)
-
-        # calculate a average countrate image
-        self.logger.info("calculating final image from stack")
-        # image7 = numpy.nanmean(self.clean_stack[:7], axis=0)
-        self.reduced_image_plain = numpy.nanmean(self.clean_stack, axis=0)
-        noise = numpy.sqrt(self.image_stack)
-        # pyfits.PrimaryHDU(data=noise).writeto("darkcorrect___noise.fits", overwrite=True)
-        noise[bad_data] = numpy.NaN
-        noise[0, :, :] = numpy.NaN
-        self.inv_noise = numpy.nansum(1./noise, axis=0)
-        self.weighted_mean = numpy.nanmean(self.clean_stack, axis=0) # numpy.nansum(self.clean_stack / noise, axis=0) / self.inv_noise
-        self.noise_image = 1. / self.inv_noise
-        # print(image.shape)
-
+        pyfits.PrimaryHDU(data=self.weighted_mean).writeto("safety__weightedmean.fits", overwrite=True)
+        pyfits.PrimaryHDU(data=self.noise_image).writeto("safety__sigma.fits", overwrite=True)
+        pyfits.PrimaryHDU(data=self.median_image).writeto("safety__median.fits", overwrite=True)
         # ratios = linearized / linearized[3:4, :, :]
 
         if (write_dumps):
@@ -916,7 +976,6 @@ class NIRWALS(object):
                                fn=bn+"n_good_pixels.fits", overwrite=True)
 
         return
-
     def subtract_first_read(self):
         if (self.first_read_subtracted):
             self.logger.debug("First read already subtracted, skipping")
@@ -927,18 +986,15 @@ class NIRWALS(object):
 
         self.image_stack -= self.first_read
         self.first_read_subtracted = True
-
     def _nonlinearity_fit_fct(self, p, x):
         y = numpy.zeros(x.shape)
         for i in range(p.shape[0]):
             y += p[i] * x**(i+1)
         return y
-
     def _nonlinearity_fit_err_fct(self, p, x, y):
         yfit = self._nonlinearity_fit_fct(p, x)
         err = numpy.sqrt(y + 10 ** 2)
         return ((y - yfit) / err)
-
     def _fit_nonlinearity_pixel(self, _x, _y):
         # print("fitting", _x.shape, _y.shape)
         # return 1
@@ -968,7 +1024,6 @@ class NIRWALS(object):
         pfit = fit[0]
 
         return pfit
-
     def fit_nonlinearity(self, ref_frame_id=10, max_linear=50000, make_plot=False):
 
         # self.subtract_first_read()
@@ -1140,7 +1195,6 @@ class NIRWALS(object):
         pyfits.PrimaryHDU(data=nonlinearity_fits_3d).writeto("nonlin3d.fits", overwrite=True)
         pyfits.PrimaryHDU(data=nonlinearity_fits_inverse).writeto("nonlin_inverse.fits", overwrite=True)
         return
-
     def read_nonlinearity_corrections(self, nonlin_fn):
 
         self.logger.debug("Reading non-linearity: %s (file exists: %s)" % (
@@ -1159,8 +1213,6 @@ class NIRWALS(object):
         self.provenance.add("nonlinearity", nonlin_fn)
         self.nonlin_fn = nonlin_fn
         self.nonlinearity_cube = nonlinearity_cube
-
-
     def apply_nonlinearity_corrections(self, img_cube=None):
 
         if (self.nonlinearity_cube is None):
@@ -1171,16 +1223,27 @@ class NIRWALS(object):
         if (img_cube is None):
             img_cube = self.image_stack
 
-        self.logger.debug("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
+        self.logger.info("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
 
-        linearized_cube = \
-            self.nonlinearity_cube[0:1, :, :] * numpy.power(img_cube, 1) + \
-            self.nonlinearity_cube[1:2, :, :] * numpy.power(img_cube, 2) + \
-            self.nonlinearity_cube[2:3, :, :] * numpy.power(img_cube, 3)
+        # linearized_cube =
+        # \
+        #     self.nonlinearity_cube[0:1, :, :] * numpy.power(img_cube, 1) + \
+        #     self.nonlinearity_cube[1:2, :, :] * numpy.power(img_cube, 2) + \
+        #     self.nonlinearity_cube[2:3, :, :] * numpy.power(img_cube, 3)
+        t1 = time.time()
+        linearized_cube = numpy.zeros_like(img_cube)
+        # for x,y in itertools.product(range(img_cube.shape[2]), range(img_cube.shape[1])):
+        #     linearized_cube[:,y,x] = numpy.polyval(self.nonlinearity_cube[:,y,x], img_cube[:,y,x])
+        poly_order = self.nonlinearity_cube.shape[0]-1
+        for p in range(poly_order):
+            self.logger.info("poly-order %d (img^%d)" % (p, poly_order-p))
+            linearized_cube += self.nonlinearity_cube[p] * numpy.power(img_cube, poly_order-p)
+
+        t2 = time.time()
+
+        self.logger.info("Non-linearity correction complete after taking %.3f seconds" % (t2-t1))
 
         return linearized_cube
-
-
     def write_results(self, fn=None, flat4salt=False):
         if (fn is None):
             fn = os.path.join(self.basedir, self.filebase) + ".reduced.fits"
@@ -1205,7 +1268,8 @@ class NIRWALS(object):
             self.logger.info("Writing output in MEF format")
             _list.extend([
                 pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
-                pyfits.ImageHDU(data=self.noise_image, name='NOISE')
+                pyfits.ImageHDU(data=self.noise_image, name='NOISE'),
+                pyfits.ImageHDU(data=self.median_image, name='MEDIAN'),
             ])
             try:
                 for i,extname in enumerate(persistency_values):
@@ -1216,7 +1280,7 @@ class NIRWALS(object):
                             name=extname)
                     )
             except Exception as e:
-                self.critical(str(e))
+                self.logger.critical(str(e))
                 pass
 
         self.logger.debug("Adding data provenance")
@@ -1226,7 +1290,6 @@ class NIRWALS(object):
         self.logger.info("Writing reduced results to %s" % (fn))
         hdulist.writeto(fn, overwrite=True)
         return
-
     def _alloc_persistency(self):
         # allocate a datacube for the persistency fit results in shared memory
         # to make it read- and write-accessible from across all worker processes
@@ -1239,13 +1302,7 @@ class NIRWALS(object):
         )
         self.persistency_fit_global[:,:,:] = numpy.NaN
         self.alloc_persistency = True
-
-    def fit_signal_with_persistency(
-            self,
-            n_workers=0,
-            previous_frame=None,
-            write_test_plots=False
-    ):
+    def fit_signal_with_persistency(self, n_workers=0, previous_frame=None, write_test_plots=False):
 
         # by default use all existing CPU cores for processing
         if (n_workers <= 0):
@@ -1310,7 +1367,6 @@ class NIRWALS(object):
         out_tmp = pyfits.PrimaryHDU(data=self.persistency_fit_global)
         out_tmp.writeto("persistency_fit_dump.fits", overwrite=True)
         return
-
     def fit_signal_with_persistency_singlepixel(self, x, y, debug=False, plot=False):
 
         _x = x - 1
@@ -1389,7 +1445,6 @@ class NIRWALS(object):
             plt.close(fig)
 
         return bestfit, fit_uncert
-
     def plot_pixel_curve(self, x, y, filebase=None,
                          cumulative=True, differential=False,
                          diff_vs_cum=False,
@@ -1490,8 +1545,6 @@ class NIRWALS(object):
             else:
                 plt.close(fig)
             # plt.close(fig)
-
-
     def dump_pixeldata(self, x, y, filebase=None, extras=None):
 
         self.logger.debug("dumping pixeldata for pixel @ %d / %d" % (x,y))
@@ -1518,8 +1571,6 @@ class NIRWALS(object):
             frame_number, raw_series, linearized
             ]+extra_pixels).T
         )
-
-
     def _parallel_worker(self, job_queue, result_queue, execute_function, is_in_class=True):
         self.logger.debug("Worker has started")
         while (True):
@@ -1540,8 +1591,6 @@ class NIRWALS(object):
             result_queue.put((x, y, result))
 
             job_queue.task_done()
-
-
     def parallel_fitter(self, xrange=None, yrange=None,
                         execute_function=None, return_dim=1, is_in_class=True,
                         n_workers=None):
@@ -1616,9 +1665,6 @@ class NIRWALS(object):
             return_results[:, y-y1,x-x1] = value
 
         return return_results
-
-
-
     def fit_2component_persistency_plus_signal(self, x, y):
 
         _x = x-1
@@ -1653,7 +1699,6 @@ class NIRWALS(object):
         #     integ_exp_time[~bad_data], series[~bad_data])
 
         return pfit #self.image_stack[1, y-1, x-1]
-
     def load_precalculated_results(self, weighted_image_fn=None, persistency_fit_fn=None):
 
         if (weighted_image_fn is not None and os.path.isfile(weighted_image_fn)):
@@ -1676,7 +1721,6 @@ class NIRWALS(object):
             self.logger.warning("Unable to load previous persistency results (%s)" % (persistency_fit_fn))
 
             pass
-
     def find_previous_exposure(self, search_dir):
 
         self.logger.debug("Finding previous exposure (%s)" % (search_dir))
@@ -1690,8 +1734,6 @@ class NIRWALS(object):
             self.logger.info("Found %s, taken %.2f seconds prior to %s" % (prior_fn, delta_seconds, self.ref_header['FILE']))
 
         return prior_fn, delta_seconds
-
-
     def __del__(self):
         # self.logger.debug("Running destructor and cleaning up shared memory")
         # clean up shared memory
