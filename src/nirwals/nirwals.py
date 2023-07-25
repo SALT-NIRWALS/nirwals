@@ -642,8 +642,8 @@ class NIRWALS(object):
         self.shmem_cube_nonlinearity = None
         self.cube_nonlinearity = None
         if (self.nonlinearity_valid()):
-            nonlin_shape = (self.nonlinearity_polyorder, self.ny, self.nx)
-            n_pixels_nonlinearity = self.nonlinearity_polyorder * self.ny * self.nx
+            nonlin_shape = (self.nonlinearity_polyorder + 1, self.ny, self.nx)
+            n_pixels_nonlinearity = (self.nonlinearity_polyorder + 1) * self.ny * self.nx
             self.logger.info("Allocating shared memory: linearized cube")
             self.shmem_cube_nonlinearity = multiprocessing.shared_memory.SharedMemory(
                 name='nonlinearity_corrections', create=True,
@@ -811,6 +811,12 @@ class NIRWALS(object):
         #
         # Now also load the nonlinearity corrections from file into shared memory
         #
+        if (self.nonlinearity_valid()):
+            self.logger.info("Loading nonlinearity correction factors from %s" % (self.nonlin_fn))
+            hdu = pyfits.open(self.nonlin_fn)
+            nonlin = hdu[0].data
+            self.cube_nonlinearity[:,:,:] = nonlin[:,:,:]
+
 
         # delete raw stack to clean up memory
         # del self.image_stack_raw
