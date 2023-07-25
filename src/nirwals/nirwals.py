@@ -526,6 +526,42 @@ class NIRWALS(object):
         self.read_exposure_setup()
 
         self.get_full_filelist()
+        self.allocate_shared_memory()
+
+    def allocate_shared_memory(self):
+        """
+        Pre-allocate shared memory for all datacubes to miniminze RAM footprint as much as possible, while
+        providing optimal performance for parallel data processing.
+        """
+        n_groups = numpy.min([self.n_groups, self.max_number_files]) if self.max_number_files > 0 else self.n_groups
+        cube_shape = (n_groups, self.ny, self.nx)
+        n_pixels_in_cube = n_groups * self.ny * self.nx
+        dummy = numpy.array([], dtype=numpy.float32)
+        self.logger.info("Assuming cube dimensions of %s for shared memory (%d bytes/pixel, total %.3f GB per cube)" % (
+            str(cube_shape), dummy.itemsize, n_pixels_in_cube*dummy.itemsize/2**30))
+
+        self.logger.info("Allocating shared memory: raw cube")
+        self.shmem_cube_raw = multiprocessing.shared_memory.SharedMemory(
+            name='raw_datacube', create=True,
+            size=(dummy.itemsize * n_pixels_in_cube),
+        )
+        self.cube_raw = numpy.ndarray(shape=cube_shape, dtype=numpy.float32, buffer=self.shmem_cube_raw.buf)
+
+        # logger.info("Copying datacube to shared memory")
+        # _raw = numpy.ndarray(shape=data_shape, dtype=numpy.float32, buffer=shmem_raw.buf)
+        # _raw[:, :, :] = raw_cube[:, :, :]
+
+        # allocate buffer for corrected data
+        self.logger.info("Allocating shared memory: linearized cube")
+        self.shmem_cube_linearized = multiprocessing.shared_memory.SharedMemory(
+            name='linearized_datacube', create=True,
+            size=(dummy.itemsize * n_pixels_in_cube),
+        )
+        self.cube_linearized = numpy.ndarray(shape=cube_shape, dtype=numpy.float32, buffer=self.shmem_cube_linearized.buf)
+        self.cube_linearized[:, :, :] = 0.
+
+
+
     def read_exposure_setup(self):
         if (self.fn is None):
             self.logger.critical("Unable to get exposure setup without valid input filename")
