@@ -83,6 +83,7 @@ if __name__ == "__main__":
         rss = NIRWALS(fn, max_number_files=args.max_number_files,
                       use_reference_pixels=args.ref_pixel_mode,
                       saturation=args.saturation,
+                      logger_name="Nirwals"
                       )
 
         if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):

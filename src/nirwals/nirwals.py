@@ -474,10 +474,12 @@ class NIRWALS(object):
                  saturation_level=62000,
                  saturation_fraction=0.25, saturation_percentile=95,
                  use_reference_pixels='none',
-                 mask_saturated_pixels=False):
+                 mask_saturated_pixels=False,
+                 logger_name=None):
+
         self.fn = fn
         self.filelist = []
-        self.logger = logging.getLogger("RSS")
+        self.logger = logging.getLogger("Nirwals" if logger_name is None else logger_name)
 
         self.use_reference_pixels = use_reference_pixels
         self.image_stack_initialized = False
@@ -550,7 +552,8 @@ class NIRWALS(object):
     def get_full_filelist(self):
         # get basedir
         fullpath = os.path.abspath(self.fn)
-        print(fullpath)
+        self.logger.info("absolute path of input file: %s" % (fullpath))
+
         self.basedir, _fn = os.path.split(fullpath)
         self.filebase = ".".join(_fn.split(".")[:-2])
         # print(self.basedir, filebase)
@@ -613,7 +616,7 @@ class NIRWALS(object):
             img_group = hdr['GROUP']
             img_read = hdr['READ']
             img_exptime = hdr['ACTEXP'] / 1000000. # convert time from raw microseconds to seconds
-            self.logger.info("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
+            self.logger.debug("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
 
             if (max_number_files > 0 and img_group >= max_number_files):
                 self.logger.debug("img-group > max-number-file --> skipping this file")
@@ -669,15 +672,8 @@ class NIRWALS(object):
             self.logger.critical("No idea what's going here and what to do with this data - HELP!!!!")
             return
 
-
-#         self.image_stack = numpy.array(self._image_stack, dtype=numpy.float32)
-
-        # self.image_stack = numpy.diff(self.image_stack_raw, axis=0)
-
         self.logger.debug("stack before/after: %s --> %s" % (str(self.image_stack_raw.shape), str(self.image_stack.shape)))
-
-        self.logger.info("read-times: %s" % (str(self.read_times)))
-
+        self.logger.debug("read-times: %s" % (str(self.read_times)))
         self.logger.debug("stack shape: %s" % (str(self.image_stack.shape)))
 
         # delete raw stack to clean up memory
