@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+import queue
 
 import sys
-print(sys.path)
+# print(sys.path)
 
 import logging
 import os
@@ -461,6 +462,45 @@ def fit_pairwise_slope(times, reads, noise, good_reads=None, plot=False, permplo
     )
 
 
+def worker__reference_pixel_correction(
+        shmem_cube_raw, shmem_cube_corrected, cube_shape,
+        refpixel_mode,
+        jobqueue, workername=None,
+):
+    """
+
+    :param shmem_cube_raw: shared memory block with raw input data
+    :param shmem_cube_corrected: shared memory block to hold corrected output file
+    :param cube_shape: shape of data cube
+    :param refpixel_mode: what algorithm to use for corrections. supported options are given in TODO: XXX
+    :param jobqueue: queue to handle workload balancing. By default reference pixels are corrected read by read
+    :param workername: name for worker to use during logging
+    :return: No return value, work is done when the jobqueue is empty
+    """
+
+    logger = logging.getLogger(workername if workername is not None else "RefPixelWorker")
+
+    cube_raw = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
+                             buffer=shmem_cube_raw.buf)
+    cube_corrected = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
+                             buffer=shmem_cube_corrected.buf)
+
+    while (True):
+        try:
+            job = jobqueue.get()
+            if (job is None):
+                # this is the termination signal
+                jobqueue.task_done()
+                break
+        except queue.Empty:
+            break
+
+        # do work here
+
+        jobqueue.task_done()
+
+    logger.info("Shutting down")
+
 
 class NIRWALS(object):
 
@@ -525,6 +565,9 @@ class NIRWALS(object):
                     pass
         else:
             self.provenance.add("saturation-level", self.saturation_level)
+
+        self.n_cores = n_cores if n_cores > 0 else multiprocessing.cpu_count()
+        self.logger.info("Using %d CPU cores/threads for parallel processing" % (self.n_cores))
 
         self.read_exposure_setup()
 
@@ -836,6 +879,11 @@ class NIRWALS(object):
         hdulist.writeto(fn, overwrite=True)
 
         return
+    def apply_reference_pixel_corrections(self):
+
+
+        pass
+
     def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None, mask_saturated_pixels=False):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
