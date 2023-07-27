@@ -517,7 +517,74 @@ def worker__reference_pixel_correction(
         jobqueue.task_done()
 
     logger.info("Shutting down")
+    shmem_cube_corrected.close()
+    shmem_cube_raw.close()
 
+def worker__nonlinearity_correction(
+        shmem_cube_corrected, shmem_corrections, cube_shape, corrections_shape,
+        jobqueue, workername=None,
+):
+    """
+
+    :param shmem_cube_corrected:
+    :param shmem_corrections:
+    :param cube_shape:
+    :param corrections_shape:
+    :param jobqueue:
+    :param workername:
+    :return:
+    """
+
+    logger = logging.getLogger(workername if workername is not None else "NonlinCorrectionWorker")
+    logger.info("Starting worker")
+
+    cube_corrected = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
+                             buffer=shmem_cube_corrected.buf)
+    poly_corrections = numpy.ndarray(shape=corrections_shape, dtype=numpy.float32,
+                             buffer=shmem_corrections.buf)
+
+    # derive polynomial degree from number of factors
+    poly_order = poly_corrections.shape[0] - 1
+
+    while (True):
+        try:
+            job = jobqueue.get()
+            if (job is None):
+                # this is the termination signal
+                jobqueue.task_done()
+                break
+        except queue.Empty as e:
+            logger.warning("job queue empty (%s)" % (e))
+            break
+
+        y = job
+        logger.debug("Starting nonlinearity correction for row %d" % (y))
+
+        t1 = time.time()
+        # get correction from data
+
+        linecube = numpy.array(cube_corrected[:,y,:])
+        zero_offset = numpy.min(linecube, axis=0)
+        # print(zero_offset.shape)
+        linecube -= zero_offset
+
+        linefactors = poly_corrections[:,y,:]
+
+        outbuf = numpy.zeros_like(linecube)
+        for p in range(poly_order):
+            # logger.info("poly-order %d (img^%d)" % (p, poly_order-p))
+            outbuf += linefactors[p] * numpy.power(linecube, poly_order-p)
+
+        cube_corrected[:,y,:] = outbuf[:,:]
+
+        t2 = time.time()
+        logger.debug("Correction for row %d done after %.3f seconds" % (y, t2-t1))
+
+        jobqueue.task_done()
+
+    logger.info("Shutting down")
+    shmem_corrections.close()
+    shmem_cube_corrected.close()
 
 class NIRWALS(object):
 
@@ -963,9 +1030,14 @@ class NIRWALS(object):
 
         # reset_frame_subtracted = self.image_stack.copy()
         # if (self.use_reference_pixels != 'none'):
+        pyfits.PrimaryHDU(data=self.cube_raw).writeto("cube_raw.fits", overwrite=True)
         self.logger.info("Applying reference pixel corrections [%s]" % (self.use_reference_pixels))
         self.apply_reference_pixel_corrections()
-        # self.apply_nonlinearity_corrections()
+
+        if (not self.nonlinearity_valid()):
+            self.logger.warning("No valid non-linearity correction selected or found, this is not good")
+        else:
+            self.apply_nonlinearity_corrections()
 
         self.logger.info("Dumping corrected datacube to file")
         pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
@@ -1405,35 +1477,45 @@ class NIRWALS(object):
         self.nonlinearity_cube = nonlinearity_cube
     def apply_nonlinearity_corrections(self, img_cube=None):
 
-        if (self.nonlinearity_cube is None):
-            self.logger.warning("No nonlinearity corrections loaded, skipping")
-            return None
+        pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
 
-        # self.subtract_first_read()
-        if (img_cube is None):
-            img_cube = self.image_stack
-
-        self.logger.info("NONLIN: data=%s   corr=%s" % (str(img_cube.shape), str(self.nonlinearity_cube.shape)))
-
-        # linearized_cube =
-        # \
-        #     self.nonlinearity_cube[0:1, :, :] * numpy.power(img_cube, 1) + \
-        #     self.nonlinearity_cube[1:2, :, :] * numpy.power(img_cube, 2) + \
-        #     self.nonlinearity_cube[2:3, :, :] * numpy.power(img_cube, 3)
+        self.logger.info("\n\n\nStarting nonlinearity correction\n\n\n")
         t1 = time.time()
-        linearized_cube = numpy.zeros_like(img_cube)
-        # for x,y in itertools.product(range(img_cube.shape[2]), range(img_cube.shape[1])):
-        #     linearized_cube[:,y,x] = numpy.polyval(self.nonlinearity_cube[:,y,x], img_cube[:,y,x])
-        poly_order = self.nonlinearity_cube.shape[0]-1
-        for p in range(poly_order):
-            self.logger.info("poly-order %d (img^%d)" % (p, poly_order-p))
-            linearized_cube += self.nonlinearity_cube[p] * numpy.power(img_cube, poly_order-p)
+        jobqueue = multiprocessing.JoinableQueue()
+        for y in range(2048):
+            jobqueue.put(y)
+
+        # setup and start worker processes
+        worker_processes = []
+        n_workers = multiprocessing.cpu_count()
+        for n in range(n_workers):
+            p = multiprocessing.Process(
+                target=worker__nonlinearity_correction,
+                kwargs=dict(shmem_cube_corrected=self.shmem_cube_linearized,
+                            shmem_corrections=self.shmem_cube_nonlinearity,
+                            cube_shape=self.cube_raw.shape,
+                            corrections_shape=self.cube_nonlinearity.shape,
+                            jobqueue=jobqueue,
+                            workername="NonLinWorker_%03d" % (n+1),
+                ),
+                daemon=True
+            )
+            jobqueue.put(None)
+            p.start()
+            worker_processes.append(p)
+
+        # wait for work to be done
+        self.logger.info("Working for all nonlinearity correction jobs to finish")
+        jobqueue.join()
+        for p in worker_processes:
+            p.join()
 
         t2 = time.time()
 
         self.logger.info("Non-linearity correction complete after taking %.3f seconds" % (t2-t1))
+        pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
+        return
 
-        return linearized_cube
     def write_results(self, fn=None, flat4salt=False):
         if (fn is None):
             fn = os.path.join(self.basedir, self.filebase) + ".reduced.fits"
