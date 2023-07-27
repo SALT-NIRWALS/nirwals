@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-print(sys.path)
+# print(sys.path)
 
 import logging
 import os
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
-    logger = logging.getLogger("RunAnalysis")
+    logger = logging.getLogger("NirwalsReduce")
 
     cmdline = argparse.ArgumentParser()
     cmdline.add_argument("--maxfiles", dest="max_number_files", default=None, type=int,
@@ -83,65 +83,66 @@ if __name__ == "__main__":
         rss = NIRWALS(fn, max_number_files=args.max_number_files,
                       use_reference_pixels=args.ref_pixel_mode,
                       saturation=args.saturation,
-                      logger_name="Nirwals"
+                      nonlinearity=args.nonlinearity_fn,
+                      logger_name="Nirwals",
                       )
 
-        if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
-            logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
-            rss.read_nonlinearity_corrections(args.nonlinearity_fn)
+        # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
+        #     logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
+        #     rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(write_dumps=dumpfiles,
                    dark_fn=args.dark_fn,
                    )
 
-        persistency_options = args.persistency_mode.split(":")
-        persistency_mode = persistency_options[0].lower()
-        have_persistency_results = False
-        if (persistency_mode == "none"):
-            logger.info("Nothing to do")
-        elif (persistency_mode == "full"):
-            logger.info("Calculating persistency results for all pixels")
-            rss.fit_signal_with_persistency(previous_frame=None)
-            have_persistency_results = True
-        elif (persistency_mode == "best"):
-            logger.info("Using on-demand persistency fitting")
-            if(len(persistency_options) < 2):
-                logger.info("Insufficient information, defaulting to running on all pixels")
-                rss.fit_signal_with_persistency(previous_frame=None)
-                have_persistency_results = True
-            else:
-                opt = persistency_options[1]
-                if (os.path.isfile(opt)):
-                    logger.info("Using optimized persistency mode (ref-fn: %s)" % (opt))
-                    rss.fit_signal_with_persistency(previous_frame=opt)
-                    have_persistency_results = True
-                elif (os.path.isdir(opt)):
-                    logger.info("Searching for optimal reference frame in --> %s <--" % (opt))
-                    xxx = rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
-                    # print(xxx)
-                    ref_fn, delta_t = xxx #rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
-                    if (ref_fn is not None):
-                        logger.info("Using optimized persistency mode using automatic ref-fn: %s (Dt=%.3f)" % (ref_fn, delta_t))
-                        rss.fit_signal_with_persistency(previous_frame=ref_fn,
-                                                        write_test_plots=args.write_debug_pngs)
-                        have_persistency_results = True
-                    else:
-                        logger.warning("No previous frame found, skipping persistency fit")
-                        # rss.fit_signal_with_persistency(previous_frame=ref_fn)
-                        # have_persistency_results = True
-                else:
-                    logger.info("Unknown option to best mode (found: %s), skipping persistency modeling" % (opt))
-        else:
-            logger.info("Unknown persistency request (%s)" % (persistency_mode))
-
-        if (have_persistency_results):
-            out_tmp = pyfits.PrimaryHDU(data=rss.persistency_fit_global)
-            fit_fn = "%s.%s.persistencyfit.fits" % (rss.filebase, args.output_postfix)
-            logger.info("Writing persistency fit to %s ..." % (fit_fn))
-            out_tmp.writeto(fit_fn, overwrite=True)
+        # persistency_options = args.persistency_mode.split(":")
+        # persistency_mode = persistency_options[0].lower()
+        # have_persistency_results = False
+        # if (persistency_mode == "none"):
+        #     logger.info("Nothing to do")
+        # elif (persistency_mode == "full"):
+        #     logger.info("Calculating persistency results for all pixels")
+        #     rss.fit_signal_with_persistency(previous_frame=None)
+        #     have_persistency_results = True
+        # elif (persistency_mode == "best"):
+        #     logger.info("Using on-demand persistency fitting")
+        #     if(len(persistency_options) < 2):
+        #         logger.info("Insufficient information, defaulting to running on all pixels")
+        #         rss.fit_signal_with_persistency(previous_frame=None)
+        #         have_persistency_results = True
+        #     else:
+        #         opt = persistency_options[1]
+        #         if (os.path.isfile(opt)):
+        #             logger.info("Using optimized persistency mode (ref-fn: %s)" % (opt))
+        #             rss.fit_signal_with_persistency(previous_frame=opt)
+        #             have_persistency_results = True
+        #         elif (os.path.isdir(opt)):
+        #             logger.info("Searching for optimal reference frame in --> %s <--" % (opt))
+        #             xxx = rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
+        #             # print(xxx)
+        #             ref_fn, delta_t = xxx #rss.find_previous_exposure(opt)  #find_previous_frame(rss.ref_header, opt)
+        #             if (ref_fn is not None):
+        #                 logger.info("Using optimized persistency mode using automatic ref-fn: %s (Dt=%.3f)" % (ref_fn, delta_t))
+        #                 rss.fit_signal_with_persistency(previous_frame=ref_fn,
+        #                                                 write_test_plots=args.write_debug_pngs)
+        #                 have_persistency_results = True
+        #             else:
+        #                 logger.warning("No previous frame found, skipping persistency fit")
+        #                 # rss.fit_signal_with_persistency(previous_frame=ref_fn)
+        #                 # have_persistency_results = True
+        #         else:
+        #             logger.info("Unknown option to best mode (found: %s), skipping persistency modeling" % (opt))
+        # else:
+        #     logger.info("Unknown persistency request (%s)" % (persistency_mode))
+        #
+        # if (have_persistency_results):
+        #     out_tmp = pyfits.PrimaryHDU(data=rss.persistency_fit_global)
+        #     fit_fn = "%s.%s.persistencyfit.fits" % (rss.filebase, args.output_postfix)
+        #     logger.info("Writing persistency fit to %s ..." % (fit_fn))
+        #     out_tmp.writeto(fit_fn, overwrite=True)
 
         red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
         logger.info("Writing reduction results to %s" % (red_fn))
-        rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
+        # rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
 
         rss.provenance.report()
 
