@@ -100,11 +100,13 @@ class DataProvenance( object ):
         return tbhdu
 
     def report(self):
-        print("\n ==== DATA PROVENANCE INVENTORY ==== ")
+        inv = []
+        inv.append("\n ==== DATA PROVENANCE INVENTORY ==== ")
         for key in self.inventory:
             for fn in self.inventory[key]:
-                print("% 20s: %s" % (key, fn))
-        print(" ==== DATA PROVENANCE INVENTORY END ==== ")
+                inv.append("% 20s: %s" % (key, fn))
+        inv.append(" ==== DATA PROVENANCE INVENTORY END ==== ")
+        self.logger.info("\n".join(inv))
         return
 
 
