@@ -79,7 +79,7 @@ def refpixel_blockyslope(data, edge=1, debug=False):
 
     #full_iy,_ = numpy.indices(data.shape, dtype=float)
     full_2d_correction = numpy.repeat(blocky_corr, 64, axis=1)
-    print(full_2d_correction.shape)
+    # print(full_2d_correction.shape)
         # * slopes + mean_top
 
     if (debug):
