@@ -746,7 +746,7 @@ class NIRWALS(object):
             img_exptime = hdr['ACTEXP'] / 1000000. # convert time from raw microseconds to seconds
             self.logger.debug("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
 
-            if (max_number_files > 0 and img_group >= max_number_files):
+            if (max_number_files > 0 and img_group > max_number_files):
                 self.logger.debug("img-group > max-number-file --> skipping this file")
                 continue
 
@@ -766,13 +766,12 @@ class NIRWALS(object):
                     numpy.sum(saturation_mask)))
                 imgdata[saturation_mask] = numpy.Inf
 
-
             self.raw_read_times[img_group-1] = img_exptime
             # self.logger.debug("raw read times: %s" % (str(self.raw_read_times)))
 
             # self.image_stack_raw[img_read-1, img_group-1, :, :] = imgdata
 
-
+            # self.logger.debug("Reading read %d into slice %d" % (img_group, img_group-1))
             self.cube_raw[img_group-1, :, :] = imgdata
 
 
