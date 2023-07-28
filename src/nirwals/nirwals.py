@@ -479,7 +479,7 @@ def worker__reference_pixel_correction(
     """
 
     logger = logging.getLogger(workername if workername is not None else "RefPixelWorker")
-    logger.info("Starting worker")
+    logger.debug("Starting worker")
 
     cube_raw = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
                              buffer=shmem_cube_raw.buf)
@@ -516,7 +516,7 @@ def worker__reference_pixel_correction(
 
         jobqueue.task_done()
 
-    logger.info("Shutting down")
+    logger.debug("Shutting down")
     shmem_cube_corrected.close()
     shmem_cube_raw.close()
 
@@ -536,7 +536,7 @@ def worker__nonlinearity_correction(
     """
 
     logger = logging.getLogger(workername if workername is not None else "NonlinCorrectionWorker")
-    logger.info("Starting worker")
+    logger.debug("Starting worker")
 
     cube_corrected = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
                              buffer=shmem_cube_corrected.buf)
@@ -582,7 +582,7 @@ def worker__nonlinearity_correction(
 
         jobqueue.task_done()
 
-    logger.info("Shutting down")
+    logger.debug("Shutting down")
     shmem_corrections.close()
     shmem_cube_corrected.close()
 
@@ -1479,7 +1479,7 @@ class NIRWALS(object):
 
         pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
 
-        self.logger.info("\n\n\nStarting nonlinearity correction\n\n\n")
+        self.logger.info("Starting nonlinearity correction")
         t1 = time.time()
         jobqueue = multiprocessing.JoinableQueue()
         for y in range(2048):
