@@ -67,6 +67,8 @@ if __name__ == "__main__":
                          help="reference pixels mode [default: NO]")
     cmdline.add_argument("--flat4salt", dest="write_flat_for_salt", default=False, action='store_true',
                          help="write a flat, 1-extension FITS file for SALT")
+    cmdline.add_argument("--report", dest="report_provenance", default=False, action='store_true',
+                         help="report ata provenance at end of processing")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -144,11 +146,12 @@ if __name__ == "__main__":
         logger.info("Writing reduction results to %s" % (red_fn))
         # rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
 
-        rss.provenance.report()
+        if (args.report_provenance):
+            rss.provenance.report()
 
         # rss.plot_pixel_curve(818,1033)
         # rss.plot_pixel_curve(1700,555)
         # rss.plot_pixel_curve(505,1660)
 
         del rss
-        print("all done!")
+        logger.info("all done!")
