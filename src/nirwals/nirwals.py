@@ -586,6 +586,14 @@ def worker__nonlinearity_correction(
     shmem_corrections.close()
     shmem_cube_corrected.close()
 
+
+def worker__fit_pairwise_slopes(
+        shmem_cube_corrected, shmem_results, cube_shape, results_shape,
+        jobqueue, workername=None,
+):
+    return
+
+
 class NIRWALS(object):
 
     mask_SATURATED = 0x0001
@@ -720,6 +728,16 @@ class NIRWALS(object):
             self.cube_nonlinearity[:, :, :] = 0.
             self.logger.debug("shared meory for nonlinearity corrections initialized")
 
+        self.n_results_dimension = 3
+        self.logger.info("Allocating shared memory for results (ndim=%d)" % (self.n_results_dimension))
+        n_pixels_results_cube = self.n_results_dimension * self.nx * self.ny
+        self.shmem_cube_results = multiprocessing.shared_memory.SharedMemory(
+            name='results_datacube', create=True,
+            size=(dummy.itemsize * n_pixels_results_cube),
+        )
+        self.cube_results = numpy.ndarray(
+            shape=(self.n_results_dimension, self.ny, self.nx), dtype=numpy.float32, buffer=self.shmem_cube_results.buf
+        )
 
     def read_exposure_setup(self):
         if (self.fn is None):
@@ -1514,6 +1532,42 @@ class NIRWALS(object):
 
         self.logger.info("Non-linearity correction complete after taking %.3f seconds" % (t2-t1))
         pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
+        return
+
+    def fit_pairwise_slopes(self):
+
+        self.logger.info("Start of fit pairwise slopes")
+        t1 = time.time()
+        jobqueue = multiprocessing.JoinableQueue()
+        for y in range(2048):
+            jobqueue.put(y)
+
+        # setup and start worker processes
+        worker_processes = []
+        n_workers = multiprocessing.cpu_count()
+        for n in range(n_workers):
+            p = multiprocessing.Process(
+                target=worker__fit_pairwise_slopes,
+                kwargs=dict(
+                            jobqueue=jobqueue,
+                            workername="NonLinWorker_%03d" % (n+1),
+                ),
+                daemon=True
+            )
+            jobqueue.put(None)
+            p.start()
+            worker_processes.append(p)
+
+        # wait for work to be done
+        self.logger.info("Waiting for all pairwise slope-fitting jobs to finish")
+        jobqueue.join()
+        for p in worker_processes:
+            p.join()
+
+        t2 = time.time()
+
+        self.logger.info("Pairwise slope-fitting complete after taking %.3f seconds" % (t2-t1))
+        # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
         return
 
     def write_results(self, fn=None, flat4salt=False):
