@@ -143,8 +143,8 @@ if __name__ == "__main__":
         #     out_tmp.writeto(fit_fn, overwrite=True)
 
         red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
-        logger.info("Writing reduction results to %s" % (red_fn))
-        # rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
+        logger.info("Writing reduction results to %s" % (os.path.abspath(red_fn)))
+        rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
 
         if (args.report_provenance):
             rss.provenance.report()
