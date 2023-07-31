@@ -589,9 +589,79 @@ def worker__nonlinearity_correction(
 
 def worker__fit_pairwise_slopes(
         shmem_cube_corrected, shmem_results, cube_shape, results_shape,
-        jobqueue, workername=None,
+        jobqueue, read_times, workername=None,
 ):
-    return
+
+    logger = logging.getLogger(workername if workername is not None else "PairSlopesWorker")
+    logger.debug("Starting worker")
+
+    cube_linearized = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
+                             buffer=shmem_cube_corrected.buf)
+    cube_results = numpy.ndarray(shape=results_shape, dtype=numpy.float32,
+                             buffer=shmem_results.buf)
+
+    while (True):
+        try:
+            job = jobqueue.get()
+            if (job is None):
+                # this is the termination signal
+                jobqueue.task_done()
+                break
+        except queue.Empty as e:
+            logger.warning("job queue empty (%s)" % (e))
+            break
+
+        y = job
+        logger.debug("Starting to fit pairwise slopes for row %d" % (y))
+
+        t1 = time.time()
+        # get correction from data
+
+        for x in range(cube_results.shape[2]):
+
+            reads = cube_linearized[:,y,x]
+            noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
+            times = numpy.array(read_times)
+
+            good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0)
+
+            times = times[good_reads]
+            reads = reads[good_reads]
+            noise = noise[good_reads]
+
+            # time differences between reads
+            dt = times.reshape((-1, 1)) - times.reshape((1, -1))
+            df = reads.reshape((-1, 1)) - reads.reshape((1, -1))
+            d_noise = noise.reshape((-1, 1)) + noise.reshape((1, -1))
+
+            useful_pairs = (dt > 0) & numpy.isfinite(df)
+            rates = (df / dt)[useful_pairs]
+            noises = d_noise[useful_pairs]
+            #     print(rates.shape)
+
+            try:
+                good = numpy.isfinite(rates)
+                for it in range(3):
+                    _stats = numpy.nanpercentile(rates[good], [16, 50, 84])
+                    _med = _stats[1]
+                    _sigma = 0.5 * (_stats[2] - _stats[0])
+                    good = good & (rates > _med - 3 * _sigma) & (rates < _med + 3 * _sigma)
+
+                weights = 1. / noises
+                weighted = numpy.sum((rates * weights)[good]) / numpy.sum(weights[good])
+
+                cube_results[:,y,x] = [weighted, _med, _sigma]
+            except Exception as e:
+                logger.debug("Encountered exception in pairfitting for x=%d, y=%d: %s" % (x,y,str(e)))
+
+        t2 = time.time()
+        logger.debug("Fitting pair-slopes for row %d done after %.3f seconds" % (y, t2-t1))
+
+        jobqueue.task_done()
+
+    logger.debug("Shutting down")
+    shmem_results.close()
+    shmem_cube_corrected.close()
 
 
 class NIRWALS(object):
@@ -1042,6 +1112,9 @@ class NIRWALS(object):
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
         self.logger.info("Done loading all files")
 
+        self.logger.info("Typical interval between reads: %.3f seconds" % (
+            numpy.nanmean(numpy.diff(self.read_times[1:-1]))))
+
         # pyfits.PrimaryHDU(data=self.image_stack).writeto("raw_stack_dmp.fits", overwrite=True)
 
         # self.reference_corrections_cube = numpy.full_like(self.image_stack, fill_value=0.)
@@ -1059,6 +1132,8 @@ class NIRWALS(object):
 
         self.logger.info("Dumping corrected datacube to file")
         pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
+
+        self.fit_pairwise_slopes()
 
         time.sleep(1)
         return
@@ -1549,8 +1624,13 @@ class NIRWALS(object):
             p = multiprocessing.Process(
                 target=worker__fit_pairwise_slopes,
                 kwargs=dict(
-                            jobqueue=jobqueue,
-                            workername="NonLinWorker_%03d" % (n+1),
+                    shmem_cube_corrected=self.shmem_cube_linearized,
+                    shmem_results=self.shmem_cube_results,
+                    cube_shape=self.cube_linearized.shape,
+                    results_shape=self.cube_results.shape,
+                    jobqueue=jobqueue,
+                    workername="PairSlopeWorker_%03d" % (n+1),
+                    read_times=self.read_times,
                 ),
                 daemon=True
             )
@@ -1593,9 +1673,9 @@ class NIRWALS(object):
         else:
             self.logger.info("Writing output in MEF format")
             _list.extend([
-                pyfits.ImageHDU(data=self.weighted_mean, name="SCI"),
-                pyfits.ImageHDU(data=self.noise_image, name='NOISE'),
-                pyfits.ImageHDU(data=self.median_image, name='MEDIAN'),
+                pyfits.ImageHDU(data=self.cube_results[0], name="SCI"),
+                pyfits.ImageHDU(data=self.cube_results[2], name='NOISE'),
+                pyfits.ImageHDU(data=self.cube_results[1], name='MEDIAN'),
             ])
             try:
                 for i,extname in enumerate(persistency_values):
@@ -1616,6 +1696,7 @@ class NIRWALS(object):
         self.logger.info("Writing reduced results to %s" % (fn))
         hdulist.writeto(fn, overwrite=True)
         return
+
     def _alloc_persistency(self):
         # allocate a datacube for the persistency fit results in shared memory
         # to make it read- and write-accessible from across all worker processes
