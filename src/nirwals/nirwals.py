@@ -2142,23 +2142,21 @@ class NIRWALS(object):
 
         return prior_fn, delta_seconds
     def __del__(self):
+        self.logger.info("Releasing shared memory allocations")
         # self.logger.debug("Running destructor and cleaning up shared memory")
         # clean up shared memory
-        try:
-            self.shmem_linearized_cube.close()
-            self.shmem_linearized_cube.unlink()
-        except:
-            pass
 
-        try:
-            self.shmem_differential_cube.close()
-            self.shmem_differential_cube.unlink()
-        except:
-            pass
+        for shmem in [
+            self.shmem_cube_raw,
+            self.shmem_cube_linearized,
+            self.shmem_cube_results,
+            self.shmem_cube_nonlinearity,
+            ]:
+            try:
+                shmem.close()
+                shmem.unlink()
+            except Exception as e:
+                self.logger.warning("Error releasing shared memory: %s" % (str(e)))
+                pass
 
-        try:
-            self.shmem_persistency_fit_global.close()
-            self.shmem_persistency_fit_global.unlink()
-        except:
-            pass
-
+        self.logger.debug("All done releasing shared memory")
