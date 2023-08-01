@@ -617,7 +617,7 @@ def worker__fit_pairwise_slopes(
         t1 = time.time()
         # get correction from data
 
-        for x in range(cube_results.shape[2]):
+        for x in range(4, cube_results.shape[2]-4 ):
 
             reads = cube_linearized[:,y,x]
             noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
@@ -1614,7 +1614,7 @@ class NIRWALS(object):
         self.logger.info("Start of fit pairwise slopes")
         t1 = time.time()
         jobqueue = multiprocessing.JoinableQueue()
-        for y in range(2048):
+        for y in range(4, 2048-4):
             jobqueue.put(y)
 
         # setup and start worker processes
