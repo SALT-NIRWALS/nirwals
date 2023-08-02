@@ -589,7 +589,7 @@ def worker__nonlinearity_correction(
 
 def worker__fit_pairwise_slopes(
         shmem_cube_corrected, shmem_results, cube_shape, results_shape,
-        jobqueue, read_times, workername=None,
+        jobqueue, read_times, speedy=False, workername=None,
 ):
 
     logger = logging.getLogger(workername if workername is not None else "PairSlopesWorker")
@@ -624,17 +624,49 @@ def worker__fit_pairwise_slopes(
             times = numpy.array(read_times)
 
             good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0)
+            if (numpy.sum(good_reads) <= 1):
+                # not enough data to do anything with
+                continue
 
             times = times[good_reads]
             reads = reads[good_reads]
             noise = noise[good_reads]
 
-            # time differences between reads
-            dt = times.reshape((-1, 1)) - times.reshape((1, -1))
-            df = reads.reshape((-1, 1)) - reads.reshape((1, -1))
-            d_noise = noise.reshape((-1, 1)) + noise.reshape((1, -1))
+            max_t = numpy.max(times)
+            n_samples = times.shape[0]
+
+            if (not speedy):
+                # time differences between reads
+                dt = times.reshape((-1, 1)) - times.reshape((1, -1))
+                df = reads.reshape((-1, 1)) - reads.reshape((1, -1))
+                d_noise = noise.reshape((-1, 1)) + noise.reshape((1, -1))
+            else:
+                # let's cut down the number of samples to use for pairwise fitting
+
+                # use all samples
+                n_select_x = numpy.arange(numpy.min([30, n_samples]))
+                n_select_y = numpy.arange(numpy.min([30, n_samples]))
+                pass
+                if (n_samples > 30):
+                    # use first 50, plus every 3rd after wards
+                    n_select_x = numpy.append(n_select_x, numpy.arange(30, numpy.min([150, n_samples, 4])))
+                    n_select_x = numpy.append(n_select_x, numpy.arange(30, numpy.min([151, n_samples, 3])))
+                    pass
+                if (n_samples > 150):
+                    #  use first 50, plus every 5th to 150, then fewer based on prime numbers to make sure we get
+                    #  unique pairings
+                    n_select_x = numpy.append(n_select_x, numpy.arange(150, n_samples, 7))
+                    n_select_x = numpy.append(n_select_x, numpy.arange(152, n_samples, 11))
+                # always include the last sample
+                n_select_x = numpy.append(n_select_x, [-1])
+                n_select_y = numpy.append(n_select_y, [-1])
+
+                dt = times[n_select_x].reshape((-1, 1)) - times[n_select_y].reshape((1, -1))
+                df = reads[n_select_x].reshape((-1, 1)) - reads[n_select_y].reshape((1, -1))
+                d_noise = noise[n_select_x].reshape((-1, 1)) + noise[n_select_y].reshape((1, -1))
 
             useful_pairs = (dt > 0) & numpy.isfinite(df)
+            n_useful_pairs = numpy.sum(useful_pairs)
             rates = (df / dt)[useful_pairs]
             noises = d_noise[useful_pairs]
             #     print(rates.shape)
@@ -650,7 +682,7 @@ def worker__fit_pairwise_slopes(
                 weights = 1. / noises
                 weighted = numpy.sum((rates * weights)[good]) / numpy.sum(weights[good])
 
-                cube_results[:,y,x] = [weighted, _med, _sigma]
+                cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
             except Exception as e:
                 logger.debug("Encountered exception in pairfitting for x=%d, y=%d: %s" % (x,y,str(e)))
 
@@ -671,6 +703,9 @@ class NIRWALS(object):
     mask_BAD_DARK = 0x0004
     mask_NEGATIVE = 0x0008
 
+    RESULT_EXTENSIONS = ["SCI", "MEDIAN", "NOISE", "NPAIRS", "MAX_T_EXP"]
+    N_RESULTS = len(RESULT_EXTENSIONS)
+
     def __init__(self, fn, max_number_files=-1,
                  saturation=None,
                  saturation_level=62000,
@@ -679,11 +714,14 @@ class NIRWALS(object):
                  mask_saturated_pixels=False,
                  nonlinearity=None,
                  n_cores=0,
+                 speedy=False,
                  logger_name=None):
 
         self.fn = fn
         self.filelist = []
         self.logger = logging.getLogger("Nirwals" if logger_name is None else logger_name)
+
+        self.logger.info("Current working directory: %s" % (os.getcwd()))
 
         self.use_reference_pixels = use_reference_pixels
         self.image_stack_initialized = False
@@ -732,6 +770,7 @@ class NIRWALS(object):
         self.logger.info("Using %d CPU cores/threads for parallel processing" % (self.n_cores))
 
         self.read_exposure_setup()
+        self.speedy = speedy
 
         self.get_full_filelist()
         self.allocate_shared_memory()
@@ -798,7 +837,7 @@ class NIRWALS(object):
             self.cube_nonlinearity[:, :, :] = 0.
             self.logger.debug("shared meory for nonlinearity corrections initialized")
 
-        self.n_results_dimension = 3
+        self.n_results_dimension = self.N_RESULTS
         self.logger.info("Allocating shared memory for results (ndim=%d)" % (self.n_results_dimension))
         n_pixels_results_cube = self.n_results_dimension * self.nx * self.ny
         self.shmem_cube_results = multiprocessing.shared_memory.SharedMemory(
@@ -1631,6 +1670,7 @@ class NIRWALS(object):
                     jobqueue=jobqueue,
                     workername="PairSlopeWorker_%03d" % (n+1),
                     read_times=self.read_times,
+                    speedy=self.speedy,
                 ),
                 daemon=True
             )
@@ -1672,22 +1712,24 @@ class NIRWALS(object):
             _list.append(hdu)
         else:
             self.logger.info("Writing output in MEF format")
-            _list.extend([
-                pyfits.ImageHDU(data=self.cube_results[0], name="SCI"),
-                pyfits.ImageHDU(data=self.cube_results[2], name='NOISE'),
-                pyfits.ImageHDU(data=self.cube_results[1], name='MEDIAN'),
-            ])
-            try:
-                for i,extname in enumerate(persistency_values):
-                    self.logger.debug("Adding MEF extension: %s" % (extname))
-                    _list.append(
-                        pyfits.ImageHDU(
-                            data=self.persistency_fit_global[i, :, :],
-                            name=extname)
-                    )
-            except Exception as e:
-                self.logger.critical(str(e))
-                pass
+            for i,name in enumerate(self.RESULT_EXTENSIONS):
+                _list.append(pyfits.ImageHDU(data=self.cube_results[i], name=name))
+            # _list.extend([
+            #     pyfits.ImageHDU(data=self.cube_results[0], name="SCI"),
+            #     pyfits.ImageHDU(data=self.cube_results[2], name='NOISE'),
+            #     pyfits.ImageHDU(data=self.cube_results[1], name='MEDIAN'),
+            # ])
+            # try:
+            #     for i,extname in enumerate(persistency_values):
+            #         self.logger.debug("Adding MEF extension: %s" % (extname))
+            #         _list.append(
+            #             pyfits.ImageHDU(
+            #                 data=self.persistency_fit_global[i, :, :],
+            #                 name=extname)
+            #         )
+            # except Exception as e:
+            #     self.logger.critical(str(e))
+            #     pass
 
         self.logger.debug("Adding data provenance")
         _list.append(self.provenance.write_as_hdu())

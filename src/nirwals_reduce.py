@@ -69,6 +69,8 @@ if __name__ == "__main__":
                          help="write a flat, 1-extension FITS file for SALT")
     cmdline.add_argument("--report", dest="report_provenance", default=False, action='store_true',
                          help="report ata provenance at end of processing")
+    cmdline.add_argument("--speedy", dest="speedy", default=False, action='store_true',
+                         help="speed up processing by adaptively reducing sample reads")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -87,6 +89,7 @@ if __name__ == "__main__":
                       saturation=args.saturation,
                       nonlinearity=args.nonlinearity_fn,
                       logger_name="Nirwals",
+                      speedy=args.speedy,
                       )
 
         # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
