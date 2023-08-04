@@ -71,6 +71,8 @@ if __name__ == "__main__":
                          help="report ata provenance at end of processing")
     cmdline.add_argument("--speedy", dest="speedy", default=False, action='store_true',
                          help="speed up processing by adaptively reducing sample reads")
+    cmdline.add_argument("--ncores", dest="n_cores", default=None, type=int,
+                         help="number of CPU cores to use")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -90,6 +92,7 @@ if __name__ == "__main__":
                       nonlinearity=args.nonlinearity_fn,
                       logger_name="Nirwals",
                       speedy=args.speedy,
+                      n_cores=args.n_cores,
                       )
 
         # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):

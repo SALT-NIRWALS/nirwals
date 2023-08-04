@@ -766,7 +766,7 @@ class NIRWALS(object):
         else:
             self.provenance.add("saturation-level", self.saturation_level)
 
-        self.n_cores = n_cores if n_cores > 0 else multiprocessing.cpu_count()
+        self.n_cores = n_cores if (n_cores is not None and n_cores > 0) else multiprocessing.cpu_count()
         self.logger.info("Using %d CPU cores/threads for parallel processing" % (self.n_cores))
 
         self.read_exposure_setup()
