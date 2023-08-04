@@ -1630,7 +1630,7 @@ class NIRWALS(object):
 
         # setup and start worker processes
         worker_processes = []
-        n_workers = multiprocessing.cpu_count()
+        n_workers = self.n_cores
         for n in range(n_workers):
             p = multiprocessing.Process(
                 target=worker__nonlinearity_correction,
@@ -1669,7 +1669,7 @@ class NIRWALS(object):
 
         # setup and start worker processes
         worker_processes = []
-        n_workers = multiprocessing.cpu_count()
+        n_workers = self.n_cores
         for n in range(n_workers):
             p = multiprocessing.Process(
                 target=worker__fit_pairwise_slopes,
