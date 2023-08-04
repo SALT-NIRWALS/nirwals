@@ -427,11 +427,15 @@ def fit_pairwise_slope(times, reads, noise, good_reads=None, plot=False, permplo
 
     try:
         good = numpy.isfinite(rates)
+
         for it in range(3):
             _stats = numpy.nanpercentile(rates[good], [16, 50, 84])
             _med = _stats[1]
             _sigma = 0.5 * (_stats[2] - _stats[0])
             good = good & (rates > _med - 3 * _sigma) & (rates < _med + 3 * _sigma)
+            n_good = numpy.sum(good)
+            if (n_good < 10):
+                break
 
         weights = 1. / noises
         weighted = numpy.sum((rates * weights)[good]) / numpy.sum(weights[good])
@@ -624,7 +628,7 @@ def worker__fit_pairwise_slopes(
             times = numpy.array(read_times)
 
             good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0)
-            if (numpy.sum(good_reads) <= 1):
+            if (numpy.sum(good_reads) < 1):
                 # not enough data to do anything with
                 continue
 
@@ -673,11 +677,20 @@ def worker__fit_pairwise_slopes(
 
             try:
                 good = numpy.isfinite(rates)
+                n_good = numpy.sum(good)
+
                 for it in range(3):
                     _stats = numpy.nanpercentile(rates[good], [16, 50, 84])
                     _med = _stats[1]
                     _sigma = 0.5 * (_stats[2] - _stats[0])
-                    good = good & (rates > _med - 3 * _sigma) & (rates < _med + 3 * _sigma)
+                    new_good = good & (rates > _med - 3 * _sigma) & (rates < _med + 3 * _sigma)
+                    n_good = numpy.sum(new_good)
+                    if (n_good < 10):
+                        # if after this iteration we are left we too few good results then
+                        # skip this iteration step and use all remaining data
+                        break
+                    else:
+                        good = new_good
 
                 weights = 1. / noises
                 weighted = numpy.sum((rates * weights)[good]) / numpy.sum(weights[good])
@@ -685,6 +698,7 @@ def worker__fit_pairwise_slopes(
                 cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
             except Exception as e:
                 logger.debug("Encountered exception in pairfitting for x=%d, y=%d: %s" % (x,y,str(e)))
+                cube_results[:,y,x] = [numpy.NaN, numpy.NaN, numpy.NaN, n_useful_pairs, max_t]
 
         t2 = time.time()
         logger.debug("Fitting pair-slopes for row %d done after %.3f seconds" % (y, t2-t1))
