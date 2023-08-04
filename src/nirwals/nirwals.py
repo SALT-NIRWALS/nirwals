@@ -791,7 +791,18 @@ class NIRWALS(object):
         self.speedy = speedy
 
         self.get_full_filelist()
-        self.allocate_shared_memory()
+
+        self.shmem_cube_raw = None
+        self.shmem_cube_linearized = None
+        self.shmem_cube_nonlinearity = None
+        self.shmem_cube_results = None
+        try:
+            self.allocate_shared_memory()
+        except FileExistsError as e:
+            self.logger.critical(
+                "Unable to allocate shared memory -- most likely causes are it is either left from previous aborted run "
+                "(check /dev/shm or the like) or you are running multiple runs in parallel. Clean up files and try again")
+            raise(e)
 
     def nonlinearity_valid(self):
         if (self.nonlin_fn is None or not os.path.isfile(self.nonlin_fn)):
@@ -813,6 +824,7 @@ class NIRWALS(object):
         Pre-allocate shared memory for all datacubes to miniminze RAM footprint as much as possible, while
         providing optimal performance for parallel data processing.
         """
+
         n_groups = numpy.min([self.n_groups, self.max_number_files]) if self.max_number_files > 0 else self.n_groups
         cube_shape = (n_groups, self.ny, self.nx)
         n_pixels_in_cube = n_groups * self.ny * self.nx
@@ -1100,7 +1112,7 @@ class NIRWALS(object):
 
         return
     def dump_data(self, data, fn, datatype="?_default_?", extname=None):
-        self.logger.debug("Writing %s to %s" % (datatype, fn))
+        self.logger.info("Writing %s to %s" % (datatype, fn))
 
         # all output gets reference header information
         _ext = [pyfits.PrimaryHDU(header=self.ref_header)]
@@ -2193,6 +2205,8 @@ class NIRWALS(object):
             self.shmem_cube_results,
             self.shmem_cube_nonlinearity,
             ]:
+            if (shmem is None):
+                continue
             try:
                 shmem.close()
                 shmem.unlink()

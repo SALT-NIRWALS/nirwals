@@ -86,20 +86,24 @@ if __name__ == "__main__":
     for fn in args.files:
         # fn = sys.argv[1]
 
-        rss = NIRWALS(fn, max_number_files=args.max_number_files,
+        try:
+            rss = NIRWALS(fn, max_number_files=args.max_number_files,
                       use_reference_pixels=args.ref_pixel_mode,
                       saturation=args.saturation,
                       nonlinearity=args.nonlinearity_fn,
                       logger_name="Nirwals",
                       speedy=args.speedy,
                       n_cores=args.n_cores,
+                      dumps=dumpfiles,
                       )
+        except:
+            logger.critical("Unable to start processing, read and resolve error message before continuing")
+            continue
 
         # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
         #     logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
         #     rss.read_nonlinearity_corrections(args.nonlinearity_fn)
-        rss.reduce(write_dumps=dumpfiles,
-                   dark_fn=args.dark_fn,
+        rss.reduce(dark_fn=args.dark_fn,
                    )
 
         # persistency_options = args.persistency_mode.split(":")
