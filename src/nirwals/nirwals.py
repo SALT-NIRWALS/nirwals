@@ -729,6 +729,7 @@ class NIRWALS(object):
                  nonlinearity=None,
                  n_cores=0,
                  speedy=False,
+                 dumps=None,
                  logger_name=None):
 
         self.fn = fn
@@ -756,6 +757,9 @@ class NIRWALS(object):
         self.saturation_fraction = saturation_fraction
         self.saturation_percentile = saturation_percentile
         self.mask_saturated_pixels = mask_saturated_pixels
+
+        # Keep track of what intermediate processing steps to save/dump
+        self.write_dumps = dumps
 
         self.provenance = DataProvenance(
             logger=self.logger,
@@ -1160,7 +1164,7 @@ class NIRWALS(object):
 
         pass
 
-    def reduce(self, dark_fn=None, write_dumps=False, mask_bad_data=None, mask_saturated_pixels=False):
+    def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
         self.logger.info("Done loading all files")
@@ -1174,21 +1178,47 @@ class NIRWALS(object):
 
         # reset_frame_subtracted = self.image_stack.copy()
         # if (self.use_reference_pixels != 'none'):
-        pyfits.PrimaryHDU(data=self.cube_raw).writeto("cube_raw.fits", overwrite=True)
+        # pyfits.PrimaryHDU(data=self.cube_raw).writeto("cube_raw.fits", overwrite=True)
+        self.dump_save(imgtype='raw')
+
         self.logger.info("Applying reference pixel corrections [%s]" % (self.use_reference_pixels))
         self.apply_reference_pixel_corrections()
+        self.dump_save(imgtype='refpixcorr')
 
         if (not self.nonlinearity_valid()):
             self.logger.warning("No valid non-linearity correction selected or found, this is not good")
         else:
             self.apply_nonlinearity_corrections()
+        self.dump_save(imgtype='linearized')
 
-        self.logger.info("Dumping corrected datacube to file")
-        pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
+        # self.logger.info("Dumping corrected datacube to file")
+        # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
 
         self.fit_pairwise_slopes()
 
-        time.sleep(1)
+    def dump_save(self, imgtype=None):
+
+        if (not self.write_dumps):
+            # no dumps need to be written
+            return
+        elif ('all' in self.write_dumps):
+            pass
+        elif (not imgtype in self.write_dumps):
+            # this dump is not selected
+            return
+
+        bn = self.filebase + "__"
+        self.logger.debug("Dump-file basename: %s" % (bn))
+
+        if (imgtype == 'raw'):
+            self.dump_data(self.cube_raw, bn+"stack_raw.fits", "RAW")
+        elif (imgtype == 'refpixcorr'):
+            self.dump_data(self.cube_linearized, bn + "stack_refpixcorr.fits", "REFPIXCORR")
+        elif (imgtype == 'linearized'):
+            self.dump_data(self.cube_linearized, bn + "stack_linearized.fits", "LINEARIZED")
+        else:
+            logger.info("Dumping of %s not yet implemented" % (imgtype))
+
         return
 
         # for frame_id in range(self.image_stack.shape[0]):
@@ -1337,51 +1367,6 @@ class NIRWALS(object):
         pyfits.PrimaryHDU(data=self.median_image).writeto("safety__median.fits", overwrite=True)
         # ratios = linearized / linearized[3:4, :, :]
 
-        if (write_dumps):
-            self.logger.info("Writing all dumps")
-            bn = self.filebase + "__"
-            self.logger.debug("Dump-file basename: %s" % (bn))
-            if ('rawstack' in write_dumps):
-                self.dump_data(self.image_stack, bn+"stack_raw.fits", "rawstack")
-            if ("zerosubstack" in write_dumps):
-                self.dump_data(data=self.image_stack,
-                               fn=bn+"stack_zerosub.fits",
-                               datatype='zerosubstack')
-            if ('linearstack' in write_dumps or 'fordark' in write_dumps):
-                self.dump_data(data=linearized,
-                               fn=bn+"stack_linearized.fits",
-                               datatype='linearstack')
-            if ('darkstack' in write_dumps):
-                self.dump_data(data=dark_cube,
-                               fn=bn+"stack_darkcube.fits",
-                               datatype='darkstack')
-            if ('diffstack' in write_dumps or 'fordark' in write_dumps):
-                self.dump_data(data=self.differential_cube,
-                               fn=bn + "stack_diff.fits",
-                               datatype='diffstack')
-            if ('cleanstack' in write_dumps):
-                self.dump_data(data=self.clean_stack,
-                               fn=bn+"stack_clean.fits",
-                               datatype='cleanstack')
-            # pyfits.PrimaryHDU(data=ratios).writeto("stack_ratios.fits", overwrite=True)
-            # pyfits.PrimaryHDU(data=self.reduced_image_plain).writeto("final_image.fits", overwrite=True)
-            # pyfits.PrimaryHDU(data=image7).writeto("final_image7.fits", overwrite=True)
-            # pyfits.PrimaryHDU(data=max_count_rates).writeto("max_count_rates.fits", overwrite=True)
-            # pyfits.PrimaryHDU(data=bad_data.astype(numpy.int)).writeto(bn+"bad_data.fits", overwrite=True)
-            if ('weighted' in write_dumps):
-                self.dump_data(data=self.weighted_mean,
-                               fn=bn+"final_image_weighted.fits",
-                               datatype='weighted')
-            if ('noise' in write_dumps):
-                self.dump_data(data=self.inv_noise,
-                               fn=bn+"final_inv_noise.fits",
-                               datatype='noise')
-
-            if ('ngoodpixels' in write_dumps):
-                n_good_pixels = numpy.sum(~bad_data, axis=0)
-                print("#goodpixels", n_good_pixels.shape)
-                self.dump_data(data=n_good_pixels,
-                               fn=bn+"n_good_pixels.fits", overwrite=True)
 
         return
     def subtract_first_read(self):
