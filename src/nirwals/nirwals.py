@@ -758,6 +758,11 @@ class NIRWALS(object):
         self.saturation_percentile = saturation_percentile
         self.mask_saturated_pixels = mask_saturated_pixels
 
+        self.shmem_cube_raw = None
+        self.shmem_cube_linearized = None
+        self.shmem_cube_nonlinearity = None
+        self.shmem_cube_results = None
+
         # Keep track of what intermediate processing steps to save/dump
         self.write_dumps = dumps
 
@@ -792,10 +797,6 @@ class NIRWALS(object):
 
         self.get_full_filelist()
 
-        self.shmem_cube_raw = None
-        self.shmem_cube_linearized = None
-        self.shmem_cube_nonlinearity = None
-        self.shmem_cube_results = None
         try:
             self.allocate_shared_memory()
         except FileExistsError as e:
