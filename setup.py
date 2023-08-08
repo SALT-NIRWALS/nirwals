@@ -7,7 +7,7 @@ setup(
     name = "nirwals",
     package_dir = {'': 'src'},
     packages = ['nirwals'],
-    version = "0.0.1",
+    version = '{{VERSION_PLACEHOLDER}}',
     description = "A pipeline for instrument signature removal for the SALT/NIRWALS instrument",
     # # long_description = long_descr,
     author = "Ralf Kotulla",
