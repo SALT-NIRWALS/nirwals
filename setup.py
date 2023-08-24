@@ -18,5 +18,15 @@ setup(
              'src/nirwals_makedark.py',
              'src/nirwals_makemasterdark.py',
              'src/nirwals_fit_nonlinearity.py',
-             ]
+             ],
+
+    install_requires=[
+        'astropy',
+        'matplotlib',
+        'multiparlog',
+        'numpy',
+        'pandas',
+        'scipy',
+        ],
+
     )
