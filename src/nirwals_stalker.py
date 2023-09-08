@@ -76,6 +76,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         self.staging_dir = staging_dir
         self.incoming_queue = incoming_queue
         self.refpixelmode = refpixelmode
+        self.latest_result = None
 
         self.nonlin_poly = None
         self.nonlin_poly_order = 0
@@ -84,7 +85,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             hdulist = pyfits.open(nonlinearity_file)
             self.nonlin_poly = hdulist[0].data
             self.nonlin_poly_order = self.nonlin_poly.shape[0] - 1
-            self.logger.info("Read non-linearity corrections from %s (order: %d)" % (
+            self.logger.debug("Read non-linearity corrections from %s (order: %d)" % (
                 nonlinearity_file, self.nonlin_poly_order
             ))
 
@@ -110,18 +111,29 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         data -= refpixels
 
         self.read_minimum = data
-        self.read_mimimum_exptime = hdulist[0].header['ACTEXP'] / 1000.
+        self.read_mimimum_exptime = hdulist[0].header['ACTEXP'] / 1e6
         self.logger.info("Sequence start is GOOD!")
         self.good_sequence = True
+
+        self.latest_result = None
+        self.saturated = None
         pass
 
     def next_read(self, filename):
-        print("Handling new read: %s (%s)" % (filename, type(filename)))
+        self.logger.debug("Handling new read: %s (%s)" % (filename, type(filename)))
 
         dir, fn = os.path.split(filename)
 
         hdulist = pyfits.open(filename)
         data = hdulist[0].data.astype(float)
+        saturated = (data > 62000)
+        if (self.saturated is None):
+            self.saturated = saturated
+        else:
+            self.saturated = saturated | self.saturated
+            # make sure that pixels that were marked at saturated in any read stay marked as saturated in all
+            # subsequent reads as well
+
         refpixels = nirwals.reference_pixels_to_background_correction(data, mode=self.refpixelmode)
         data -= refpixels
 
@@ -136,28 +148,38 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
                 nlc += self.nonlin_poly[p] * numpy.power(data, self.nonlin_poly_order-p)
             data = nlc
             t2 = time.time()
-            self.logger.info("Done with non-linearity correction (%.4f)" % (t2-t1))
+            self.logger.debug("Done with non-linearity correction (%.4f)" % (t2-t1))
 
         # divide by exposure time
-        exptime = hdulist[0].header['ACTEXP'] / 1000.
+        exptime = hdulist[0].header['ACTEXP'] / 1e6
+        print(exptime)
         data /= (exptime - self.read_mimimum_exptime)
 
-        hdulist[0].data = data
+        if (self.latest_result is None):
+            self.latest_result = data
+        else:
+            self.latest_result[~self.saturated] = data[~self.saturated]
+
+        hdulist[0].data = self.latest_result
+
         out_fn,ext = os.path.splitext(fn)
         out_fn += "__qred.fits"
         stage_fn = os.path.join(self.staging_dir, out_fn)
-        self.logger.info("Writing quick-reduced frame to %s" % (stage_fn))
+        self.logger.debug("Writing quick-reduced frame to %s" % (stage_fn))
         hdulist.writeto(stage_fn, overwrite=True)
 
-        pass
+        return out_fn
 
     def run(self):
 
         while (True):
+            t1 = time.time()
             try:
                 job = self.incoming_queue.get()
             except Exception as e:
                 self.logger.critical(str(e))
+            t2 = time.time()
+            self.logger.debug("got new task after waiting for %.3f seconds" % (t2-t1))
 
             if (job is None):
                 self.logger.info("Shutting down worker")
@@ -168,17 +190,18 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             new_filename = job
             dir, fn = os.path.split(new_filename)
             seq_base = ".".join(fn.split(".")[:-3])
-            print(seq_base)
-            print(type(new_filename))
+            # print(seq_base)
+            # print(type(new_filename))
             if (seq_base == self.current_base):
-                self.next_read(new_filename)
+                out_fn = self.next_read(new_filename)
             else:
                 self.start_new_sequence(new_filename)
+                out_fn = "NEW SEQ"
             end_time = time.time()
 
             self.incoming_queue.task_done()
-            self.logger.info("On-the-fly processing of %s completed after %.3f seconds" % (
-                new_filename, end_time-start_time))
+            self.logger.info("On-the-fly processing of %s --> %s completed after %.3f seconds" % (
+                new_filename, out_fn, end_time-start_time))
 
 if __name__ == "__main__":
 
@@ -217,8 +240,8 @@ if __name__ == "__main__":
     observer.schedule(event_handler, path2watch, recursive=False)
     observer.start()
 
-    for n in range(6):
-        time.sleep(00.7)
+    for n in range(20):
+        time.sleep(0.7)
         job_queue.put('/nas/t7black/salt/incoming/N202303080003.3.1.%d.fits' % (n+1))
     # time.sleep(1)
     # job_queue.put('/nas/t7black/salt/incoming/N202303080003.3.1.2.fits')
