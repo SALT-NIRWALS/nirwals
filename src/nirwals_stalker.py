@@ -238,6 +238,8 @@ if __name__ == "__main__":
                          help="non-linearity correction coefficients (3-d FITS cube)")
     cmdline.add_argument("--refpixel", dest="ref_pixel_mode", default='blockyslope2',
                          help="reference pixels mode [default: NO]")
+    cmdline.add_argument("--test", dest="test", default=None,
+                         help="test mode; syntax: --test=delay:@filelist")
     cmdline.add_argument("directory", nargs=1, help="name of directory to watch")
     args = cmdline.parse_args()
 
@@ -271,14 +273,23 @@ if __name__ == "__main__":
     observer.schedule(event_handler, path2watch, recursive=False)
     observer.start()
 
-    for n in range(15):
-        time.sleep(3)
-        job_queue.put('/nas/t7black/salt/incoming/N202303080003.3.1.%d.fits' % (n+1))
-    # time.sleep(1)
-    # job_queue.put('/nas/t7black/salt/incoming/N202303080003.3.1.2.fits')
-    # time.sleep(1)
-    # job_queue.put('/nas/t7black/salt/incoming/N202303080003.3.1.3.fits')
-    # observer.new_read("test2")
+    # For testing, simulate the arrival of a bunch of new files
+    if (args.test is not None):
+        testdelay = float(args.test.split(":")[0])
+        list_fn = args.test.split("@")[1]
+        testfiles = []
+        with open(list_fn, "r") as lf:
+            lines = lf.readlines()
+            for l in lines:
+                if (l.strip().startswith("#")):
+                    continue
+                fn = l.strip().split()[0]
+                if (os.path.isfile(fn)):
+                    testfiles.append(fn)
+        logger.info("Test-mode activated, feeding %d files with delays of %.2f seconds" % (len(testfiles), testdelay))
+        for fn in testfiles:
+            time.sleep(testdelay)
+            job_queue.put(fn)
 
     try:
         while True:
