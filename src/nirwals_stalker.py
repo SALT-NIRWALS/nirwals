@@ -152,7 +152,6 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
         # divide by exposure time
         exptime = hdulist[0].header['ACTEXP'] / 1e6
-        print(exptime)
         data /= (exptime - self.read_mimimum_exptime)
 
         if (self.latest_result is None):
