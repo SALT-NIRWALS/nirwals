@@ -27,6 +27,7 @@ setup(
         'numpy',
         'pandas',
         'scipy',
+        'pyvo',
         ],
 
     )
