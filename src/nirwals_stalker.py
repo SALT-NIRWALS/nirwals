@@ -76,7 +76,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         self.samp_cli = samp_cli
 
     def start_new_sequence(self, filename):
-        print("Starting new sequence: %s" % (filename))
+        self.logger.info("Starting new sequence: %s" % (filename))
 
         dirname, fn = os.path.split(filename)
         seq_base = ".".join(fn.split(".")[:-3])
@@ -165,6 +165,9 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             t1 = time.time()
             try:
                 job = self.incoming_queue.get()
+            except KeyboardInterrupt:
+                self.logger.info("Shutting down on-the-fly worker after user command")
+                break
             except Exception as e:
                 self.logger.critical(str(e))
                 self.incoming_queue.task_done()
@@ -230,7 +233,7 @@ if __name__ == "__main__":
     args = cmdline.parse_args()
 
     path2watch = args.directory[0]
-    print(path2watch)
+    # print(path2watch)
 
     logger.info("Connection to ds9 via SAMP protocol")
     samp_cli = None
@@ -244,6 +247,7 @@ if __name__ == "__main__":
         logger.critical("Error while establishing SAMP link: %s" % (str(e)))
         pass
 
+    logger.info("Starting on-the-fly reduction process")
     job_queue = multiprocessing.JoinableQueue()
     stalker_worker = NirwalsOnTheFlyReduction(
         job_queue, staging_dir=args.staging_dir,
@@ -253,7 +257,7 @@ if __name__ == "__main__":
     stalker_worker.daemon = True
     stalker_worker.start()
 
-    logging.info(f'start watching directory {path2watch!r}')
+    logger.info("Starting to watch directory for new files: %s" % (path2watch))
     event_handler = NirwalsQuicklook(job_queue)
     observer = watchdog.observers.Observer()
     observer.schedule(event_handler, path2watch, recursive=False)
@@ -281,16 +285,18 @@ if __name__ == "__main__":
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        logger.debug("Starting shutdown proceduce")
         pass
     finally:
         # Shut down the directory watchdog
-        print("Stopping watchdog")
+        logger.debug("Stopping watchdog")
         observer.stop()
         observer.join()
 
         # Terminate the on-the-fly reduction worker
-        print("Shutting down on-the-fly reduction")
+        logger.debug("Shutting down on-the-fly reduction")
         job_queue.put(None)
         job_queue.close()
         stalker_worker.join()
 
+    logger.info("All shut down, good bye & have a great day!")
