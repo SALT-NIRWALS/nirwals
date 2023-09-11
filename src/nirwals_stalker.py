@@ -6,6 +6,8 @@ import multiprocessing
 import os
 import argparse
 import astropy.io.fits as pyfits
+import astropy.samp.errors
+import pyvo.samp as sampy
 
 import multiparlog as mplog
 import numpy
@@ -64,7 +66,7 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
 
 class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
-    def __init__(self, incoming_queue, staging_dir, nonlinearity_file, refpixelmode, ds9):
+    def __init__(self, incoming_queue, staging_dir, nonlinearity_file, refpixelmode, samp_cli=None):
         super(NirwalsOnTheFlyReduction, self).__init__()
 
         self.logger = logging.getLogger("StalkerProcess")
@@ -88,6 +90,8 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             self.logger.debug("Read non-linearity corrections from %s (order: %d)" % (
                 nonlinearity_file, self.nonlin_poly_order
             ))
+
+        self.samp_cli = samp_cli
 
     def start_new_sequence(self, filename):
         print("Starting new sequence: %s" % (filename))
@@ -163,9 +167,13 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
         out_fn,ext = os.path.splitext(fn)
         out_fn += "__qred.fits"
-        stage_fn = os.path.join(self.staging_dir, out_fn)
+        stage_fn = os.path.abspath(os.path.join(self.staging_dir, out_fn))
         self.logger.debug("Writing quick-reduced frame to %s" % (stage_fn))
         hdulist.writeto(stage_fn, overwrite=True)
+
+        if (self.samp_cli is not None):
+            self.samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
+            self.samp_cli.enotify_all(mtype='ds9.set', cmd='fits %s' % (stage_fn))
 
         return out_fn
 
@@ -202,6 +210,18 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             self.logger.info("On-the-fly processing of %s --> %s completed after %.3f seconds" % (
                 new_filename, out_fn, end_time-start_time))
 
+samp_metadata = {
+    "samp.name": "NIRWALS_stalker",
+    "samp.description.text": "NIRWALS directory watcher and on-the-fly reduction",
+    "samp.icon.url": "https://avatars.githubusercontent.com/u/95205451?s=48&v=4",
+    "samp.documentation.url": "https://github.com/SALT-NIRWALS/nirwals/",
+    "author.name": "Ralf Kotulla",
+    "author.email": "kotulla@wisc.edu",
+    "author.affiliation": "University of Wisconsin - Madison",
+    "home.page": "https://github.com/rkotulla",
+    "cli1.version": "0.01",
+}
+
 if __name__ == "__main__":
 
     mplog.setup_logging(debug_filename="debug.log",
@@ -224,12 +244,24 @@ if __name__ == "__main__":
     path2watch = args.directory[0]
     print(path2watch)
 
+    logger.info("Connection to ds9 via SAMP protocol")
+    samp_cli = None
+    try:
+        samp_cli = sampy.SAMPIntegratedClient(metadata = samp_metadata)
+        samp_cli.connect()
+        samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
+    except astropy.samp.errors.SAMPHubError as e:
+        logger.warning("No SAMPHub found, automatic forwarding to ds9 disabled")
+    except Exception as e:
+        logger.critical("Error while establishing SAMP link: %s" % (str(e)))
+        pass
+
     job_queue = multiprocessing.JoinableQueue()
     stalker_worker = NirwalsOnTheFlyReduction(
         job_queue, staging_dir=args.staging_dir,
         nonlinearity_file=args.nonlinearity_fn,
         refpixelmode=args.ref_pixel_mode,
-        ds9=None)
+        samp_cli=samp_cli)
     stalker_worker.daemon = True
     stalker_worker.start()
 
@@ -239,8 +271,8 @@ if __name__ == "__main__":
     observer.schedule(event_handler, path2watch, recursive=False)
     observer.start()
 
-    for n in range(20):
-        time.sleep(0.7)
+    for n in range(15):
+        time.sleep(3)
         job_queue.put('/nas/t7black/salt/incoming/N202303080003.3.1.%d.fits' % (n+1))
     # time.sleep(1)
     # job_queue.put('/nas/t7black/salt/incoming/N202303080003.3.1.2.fits')
