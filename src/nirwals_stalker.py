@@ -13,8 +13,8 @@ import multiparlog as mplog
 import numpy
 
 import watchdog
-from watchdog.observers import Observer
-# from watchdog.events import LoggingEventHandler, FileSystemEventHandler
+import watchdog.events
+import watchdog.observers
 
 import time
 import nirwals
@@ -255,7 +255,7 @@ if __name__ == "__main__":
 
     logging.info(f'start watching directory {path2watch!r}')
     event_handler = NirwalsQuicklook(job_queue)
-    observer = Observer()
+    observer = watchdog.observers.Observer()
     observer.schedule(event_handler, path2watch, recursive=False)
     observer.start()
 
