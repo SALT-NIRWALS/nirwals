@@ -1657,7 +1657,7 @@ class NIRWALS(object):
         t2 = time.time()
 
         self.logger.info("Non-linearity correction complete after taking %.3f seconds" % (t2-t1))
-        pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
+        # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
         return
 
     def fit_pairwise_slopes(self):
