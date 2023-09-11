@@ -14,13 +14,10 @@ import numpy
 
 import watchdog
 from watchdog.observers import Observer
-from watchdog.events import LoggingEventHandler, FileSystemEventHandler
+# from watchdog.events import LoggingEventHandler, FileSystemEventHandler
 
 import time
 import nirwals
-
-from nirwals import NIRWALS, dump_options
-
 
 
 class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
@@ -36,32 +33,12 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
             ignore_directories=True, case_sensitive=False)
         super(NirwalsQuicklook, self).__init__()
 
-
-#        def on_created(self, event):
     def on_closed(self, event):
         print("Watchdog received closed event - % s." % event.src_path)
         # Event is created, you can process it now
 
         # Hand on work to parallel worker
         self.handler_queue.put(event.src_path)
-
-
-        # return event
-            # this is a new sequence
-
-    # @staticmethod
-    # def on_any_event(event):
-    #     if event.is_directory:
-    #         return None
-    #     elif event.event_type == 'created':
-    #         # Event is created, you can process it now
-    #         print("Watchdog received created event - % s." % event.src_path)
-    #     else:
-    #         return None
-    #
-    #     if (not event.src_path.endswith(".fits")):
-    #         return None
-
 
 
 class NirwalsOnTheFlyReduction(multiprocessing.Process):
@@ -74,6 +51,11 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         self.current_base = None
         self.zero_read = None
         self.good_sequence = False
+        self.sequence_firstread_fn = None
+        self.read_minimum = None
+        self.read_minimum_exptime = None
+        self.latest_result = None
+        self.saturated = None
 
         self.staging_dir = staging_dir
         self.incoming_queue = incoming_queue
@@ -96,14 +78,14 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
     def start_new_sequence(self, filename):
         print("Starting new sequence: %s" % (filename))
 
-        dir, fn = os.path.split(filename)
+        dirname, fn = os.path.split(filename)
         seq_base = ".".join(fn.split(".")[:-3])
 
-        # update the new of the sequence we are currently working on
+        # update the name of the sequence we are currently working on
         self.current_base = seq_base
 
         # find the first read in this sequence
-        self.sequence_firstread_fn = os.path.join(dir, "%s.1.1.fits" % (seq_base))
+        self.sequence_firstread_fn = os.path.join(dirname, "%s.1.1.fits" % (seq_base))
         if (not os.path.isfile(self.sequence_firstread_fn)):
             self.logger.warning("Unable to find first read in this sequence (%s)" % (self.sequence_firstread_fn))
             self.good_sequence = False
@@ -126,7 +108,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
     def next_read(self, filename):
         self.logger.debug("Handling new read: %s (%s)" % (filename, type(filename)))
 
-        dir, fn = os.path.split(filename)
+        _, fn = os.path.split(filename)
 
         hdulist = pyfits.open(filename)
         data = hdulist[0].data.astype(float)
@@ -165,7 +147,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
         hdulist[0].data = self.latest_result
 
-        out_fn,ext = os.path.splitext(fn)
+        out_fn, ext = os.path.splitext(fn)
         out_fn += "__qred.fits"
         stage_fn = os.path.abspath(os.path.join(self.staging_dir, out_fn))
         self.logger.debug("Writing quick-reduced frame to %s" % (stage_fn))
@@ -185,6 +167,8 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
                 job = self.incoming_queue.get()
             except Exception as e:
                 self.logger.critical(str(e))
+                self.incoming_queue.task_done()
+                break
             t2 = time.time()
             self.logger.debug("got new task after waiting for %.3f seconds" % (t2-t1))
 
@@ -195,7 +179,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
             start_time = time.time()
             new_filename = job
-            dir, fn = os.path.split(new_filename)
+            _, fn = os.path.split(new_filename)
             seq_base = ".".join(fn.split(".")[:-3])
             # print(seq_base)
             # print(type(new_filename))
@@ -210,6 +194,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             self.logger.info("On-the-fly processing of %s --> %s completed after %.3f seconds" % (
                 new_filename, out_fn, end_time-start_time))
 
+
 samp_metadata = {
     "samp.name": "NIRWALS_stalker",
     "samp.description.text": "NIRWALS directory watcher and on-the-fly reduction",
@@ -221,6 +206,7 @@ samp_metadata = {
     "home.page": "https://github.com/rkotulla",
     "cli1.version": "0.01",
 }
+
 
 if __name__ == "__main__":
 
@@ -249,7 +235,7 @@ if __name__ == "__main__":
     logger.info("Connection to ds9 via SAMP protocol")
     samp_cli = None
     try:
-        samp_cli = sampy.SAMPIntegratedClient(metadata = samp_metadata)
+        samp_cli = sampy.SAMPIntegratedClient(metadata=samp_metadata)
         samp_cli.connect()
         samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
     except astropy.samp.errors.SAMPHubError as e:
