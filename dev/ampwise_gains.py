@@ -52,6 +52,8 @@ if __name__ == "__main__":
                          help="end row to use for stacking")
     cmdline.add_argument("--master", dest="master", default=False, action='store_true',
                          help="combine results for all input frames")
+    cmdline.add_argument("--pdf", dest="pdf", default='master_gains.pdf', type=str,
+                         help="name for combined pdf output")
     cmdline.add_argument("files", nargs='+', help="reduced input files")
     args = cmdline.parse_args()
 
@@ -64,7 +66,7 @@ if __name__ == "__main__":
     master_gains = []
     master_groups = []
 
-    master_pdf = PdfPages("mastergain.pdf")
+    master_pdf = PdfPages(args.pdf)
 
     for fn in filelist:
 
