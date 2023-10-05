@@ -62,6 +62,10 @@ if __name__ == "__main__":
 
     master_ratios = []
     master_gains = []
+    master_groups = []
+
+    master_pdf = PdfPages("mastergain.pdf")
+
     for fn in filelist:
 
         logger.info("Loading input file (%s)" % (fn))
@@ -70,27 +74,31 @@ if __name__ == "__main__":
         # print(data.shape)
 
         pdf_fn = fn[:-5]+"__gainfit.pdf"
-        pdf = PdfPages("gainfit2.pdf")
+        pdf = PdfPages(pdf_fn)
 
         namps = hdulist[0].header['NOUTPUTS']
         logger.info("Preparing for %d amplifiers" % (namps))
 
-        logger.info("Stacking rows (%d ... %d" % (args.y1, args.y2))
+        logger.info("Stacking rows (%d ... %d)" % (args.y1, args.y2))
         colstack = numpy.sum(data[args.y1:args.y2], axis=0)
+        numpy.savetxt(fn[:-5]+"___colstack.txt", colstack.reshape((-1,1)))
 
         # find only good data -- first & last 4 colums are reference pixels and always bad
         good_data = numpy.isfinite(colstack)
         good_data[:4] = False
         good_data[-4:] = False
+        logger.info("Using %d good columns" % (numpy.sum(good_data)))
 
         namps = hdulist[0].header['NOUTPUTS']
         ampsize = 2048 // namps
+        n_groups = hdulist[0].header['NGROUPS']
 
         fig,ax = plt.subplots()
         ax.scatter(numpy.arange(colstack.shape[0]), colstack, s=1)
         for n in range(namps+1):
             ax.axvline(x=n*ampsize, alpha=0.2)
         pdf.savefig(fig)
+        plt.close(fig)
 
         amp_x = numpy.arange(ampsize)
         n_points = 10
@@ -98,14 +106,24 @@ if __name__ == "__main__":
 
         chunks = []
         amp_edges = []
+        bad_file = False
+
         for amp in range(namps):
 
             a1 = amp * ampsize
             a2 = a1 + ampsize
 
             amp_good = good_data[a1:a2]
+            if(numpy.sum(amp_good) < 10):
+                logger.critical("Insufficient good data, amp %d" % (amp+1))
+                print("bad amp:", numpy.sum(amp_good))
+                print(amp_good)
+                bad_file = True
+                break
+
             amp_x = numpy.arange(ampsize)[amp_good]
             amp_val = colstack[a1:a2][amp_good]
+
 
             point_spacing = (numpy.max(amp_x) - numpy.min(amp_x)) / n_points
             base_points = (numpy.arange(n_points, dtype=float) + 0.5) * point_spacing + numpy.min(amp_x)
@@ -125,14 +143,8 @@ if __name__ == "__main__":
             logger.debug("%02d %10.1f %10.1f" % (amp, linfit.intercept, linfit.intercept+linfit.slope*ampsize))
             chunks.append( (amp_x+a1, linfit.slope*amp_x+linfit.intercept) )
 
-        fig,ax = plt.subplots(figsize=(13,5))
-        ax.scatter(numpy.arange(colstack.shape[0]), colstack, s=1)
-        for n in range(namps+1):
-            ax.axvline(x=n*ampsize, alpha=0.2)
-        for [x,y] in chunks:
-            ax.plot(x,y)
-        pdf.savefig(fig)
-
+        if (bad_file):
+            continue
 
         amp_edges = numpy.array(amp_edges)
         ratios = amp_edges[1:,0] / amp_edges[:-1,1]
@@ -160,13 +172,35 @@ if __name__ == "__main__":
         logger.info("Writing output to %s" % (out_fn))
         pyfits.PrimaryHDU(data=img_fixed).writeto(out_fn, overwrite=True)
 
+        fig,ax = plt.subplots(figsize=(13,5))
+        fig.suptitle("%s :: #grp=%d" % (fn, n_groups))
+        ax.scatter(numpy.arange(colstack.shape[0]), colstack, s=1)
+        colstack_fixed = colstack / gains_full
+        ax.scatter(numpy.arange(colstack.shape[0]), colstack_fixed*1.2, s=1, alpha=0.5)
+        for n in range(namps+1):
+            ax.axvline(x=n*ampsize, alpha=0.2)
+        for [x,y] in chunks:
+            ax.plot(x,y)
+        ax.set_yscale('log')
+        pdf.savefig(fig)
+        master_pdf.savefig(fig)
+        plt.close(fig)
+
+
+
         # keep track of all ratios & gains
         master_gains.append(gains)
         master_ratios.append(ratios)
+        master_groups.append(n_groups)
 
+        pdf.close()
 
     master_gains = numpy.array(master_gains)
     master_ratios = numpy.array(master_ratios)
+    master_groups = numpy.array(master_groups).reshape((-1,1))
 
     pyfits.PrimaryHDU(data=master_gains).writeto("mastergains.fits", overwrite=True)
     pyfits.PrimaryHDU(data=master_ratios).writeto("masterratios.fits", overwrite=True)
+    pyfits.PrimaryHDU(data=master_groups).writeto("mastergroups.fits", overwrite=True)
+
+    master_pdf.close()
