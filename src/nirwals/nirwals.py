@@ -29,6 +29,8 @@ warnings.filterwarnings('ignore')
 from .provenance import DataProvenance
 from .refpixel_calibrate import  reference_pixels_to_background_correction
 
+import nirwals.data
+
 import astropy
 print(astropy.__path__)
 
@@ -1745,6 +1747,9 @@ class NIRWALS(object):
 
         self.logger.debug("Adding data provenance")
         _list.append(self.provenance.write_as_hdu())
+
+        self.logger.debug("Adding fiber map data")
+        _list.append(nirwals.data.get_fibermap())
 
         hdulist = pyfits.HDUList(_list)
         self.logger.info("Writing reduced results to %s" % (fn))
