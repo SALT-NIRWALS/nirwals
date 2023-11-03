@@ -1623,7 +1623,7 @@ class NIRWALS(object):
         self.nonlinearity_cube = nonlinearity_cube
     def apply_nonlinearity_corrections(self, img_cube=None):
 
-        pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
+        # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
 
         self.logger.info("Starting nonlinearity correction")
         t1 = time.time()
