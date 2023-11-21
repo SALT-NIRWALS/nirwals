@@ -4,8 +4,10 @@
 import logging
 import os
 import sys
+import multiparlog as mplog
 
 import astropy.io.fits as pyfits
+import importlib.metadata
 
 class DataProvenance( object ):
 
@@ -33,6 +35,12 @@ class DataProvenance( object ):
                 self.add("os-machine", str(platform.machine()))
                 self.add("os-processor", str(platform.processor()))
                 self.add("interpreter", " ".join(platform.architecture()))
+
+                self.add("nirwals-version", str(importlib.metadata.version('nirwals')))
+                self.add("astropy-version", str(importlib.metadata.version('astropy')))
+                self.add("numpy-version", str(importlib.metadata.version('numpy')))
+                self.add("scipy-version", str(importlib.metadata.version('scipy')))
+
             except:
                 self.logger.debug("platform information not available for provenance")
                 pass
@@ -124,6 +132,13 @@ class DataProvenance( object ):
 
 
 if __name__ == "__main__":
+
+    mplog.setup_logging(debug_filename="debug.log",
+                        log_filename="run_analysis.log")
+    mpl_logger = logging.getLogger('matplotlib')
+    mpl_logger.setLevel(logging.WARNING)
+
+    logger = logging.getLogger("NirwalsReduce")
 
     fn = sys.argv[1]
     prov = DataProvenance()
