@@ -120,7 +120,7 @@ if __name__ == "__main__":
     rss = NIRWALS(fn, saturation=saturation_fn,
                   max_number_files=args.max_number_files,
                   use_reference_pixels=args.ref_pixel_mode,)
-
+    rss.apply_reference_pixel_corrections()
     # rss.reduce(write_dumps=False)
     # rss.write_results()
 
@@ -138,8 +138,10 @@ if __name__ == "__main__":
         logger.info("Starting to fill queue")
         n_jobs = 0
         for x,y in itertools.product(range(2048), range(2048)):
-            reads_raw = rss.image_stack[:, y,x]
-            reads_refpixelcorr = rss.image_stack[:, y,x]
+
+            # while we use cube_linearized, we did not actually apply any nonlinearity corrections
+            reads_raw = rss.cube_raw[:, y,x]
+            reads_refpixelcorr = rss.cube_linearized[:, y,x]
             # print(reads_raw.shape, reads_refpixelcorr.shape)
 
             jobqueue.put((x, y, reads_raw, reads_refpixelcorr))
@@ -149,7 +151,7 @@ if __name__ == "__main__":
             #     break
             # break
         logger.info("Done with filling queue")
-        print("STACK: %d" % (rss.image_stack.shape[0]))
+        print("STACK: %d" % (rss.cube_raw.shape[0]))
 
         worker_processes = []
         for n in range(args.n_cores):
@@ -157,7 +159,7 @@ if __name__ == "__main__":
                 target= nonlinfit_worker,
                 kwargs=dict(jobqueue=jobqueue,
                             resultqueue=resultqueue,
-                            times=rss.raw_read_times[0,:rss.image_stack.shape[0]],
+                            times=rss.raw_read_times[:rss.cube_raw.shape[0]],
                             poly_order=poly_order,
                             ref_level=10000,
                             saturation_level=55000,
@@ -221,29 +223,54 @@ if __name__ == "__main__":
                 [x,y] = xy
                 print(xy,x,y)
 
-                fig = plt.figure()
-                ax = fig.add_subplot(111)
+                fig, axs = plt.subplots(ncols=2, figsize=(8,4), tight_layout=True)
+                # axs = fig.add_subplot(col)
 
-                raw_sequence = rss.image_stack[:,y,x]
+                raw_sequence = rss.cube_raw[:,y,x]
                 raw0 = raw_sequence - numpy.nanmin(raw_sequence)
                 read_number = numpy.arange(raw_sequence.shape[0])
+                times = rss.raw_read_times[:]
+
+
+                # find closest point to 5000 counts
+                closest = numpy.argmin(numpy.fabs(raw0-10000))
+                ref_countrate = raw0[closest] / times[closest]
+                ref_counts = times * ref_countrate
 
                 poly = coeffs[:, y,x]
 
-                times = rss.raw_read_times[0,:]
                 corrected = numpy.polyval(poly, raw0)
                 # print(raw_sequence.shape)
-                ax.scatter(times, raw0, s=2, alpha=0.2, c='blue', label='raw')
-                ax.plot(times, raw0, 'b-', linewidth=1, c='blue')
+                axs[0].plot(times, ref_counts, alpha=0.3, linewidth=3, color="#808080")
+                axs[0].scatter(times, raw0, s=2, alpha=0.2, c='blue', label='raw')
+                axs[0].plot(times, raw0, 'b-', linewidth=1, c='blue')
+                axs[0].scatter(times, corrected, c='orange', label='linearized', s=1)
+                axs[0].legend(loc='upper left')
 
-                ax.scatter(times, corrected, c='orange', label='linearized', s=1)
-
-                ax.legend(loc='upper left')
-
-                maxy = numpy.min([numpy.max(raw0), 65000])
+                maxy = numpy.min([numpy.nanmax(raw0), 65000])
                 maxt = numpy.nanmax(times)
-                ax.set_ylim((-0.03*maxy,1.04*maxy))
-                ax.set_xlim((-0.03*maxt,1.03*maxt))
+                axs[0].set_ylim((-0.03*maxy,1.04*maxy))
+                axs[0].set_xlim((-0.03*maxt,1.03*maxt))
+                axs[0].set_xlabel("Integration time [seconds]")
+                axs[0].set_ylabel("net signal [counts]")
+
+
+                nl = (raw0-ref_counts)/ref_counts
+                max_nl = numpy.nanmax([-0.3, numpy.nanmin(nl)])
+                print(max_nl)
+                axs[1].scatter(raw0/1e3, nl, s=2, alpha=0.2, c='blue', label='raw')
+                axs[1].plot(raw0/1e3, nl, 'b-', linewidth=1, c='blue')
+                axs[1].scatter(raw0/1e3, (corrected-ref_counts)/ref_counts, c='orange', label='linearized', s=1)
+
+                axs[1].grid(alpha=0.2)
+                axs[1].legend(loc='upper right')
+                axs[1].set_ylim((max_nl,0.05)) #(-0.03*maxy,1.04*maxy))
+                axs[1].set_xlim((0, 1.03*maxy/1e3)) #((-0.03*maxt,1.03*maxt))
+                axs[1].set_xlabel("Raw counts [x1000 counts]")
+                axs[1].set_ylabel("non-linearity [(raw-corrected)/corrected]")
+
+
+
                 fig.suptitle("Pixel %d , %d" % (x,y))
 
                 pdf.savefig(fig)
