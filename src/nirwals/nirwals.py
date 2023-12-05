@@ -593,6 +593,84 @@ def worker__nonlinearity_correction(
     shmem_cube_corrected.close()
 
 
+def select_samples(times, reads, noise, speedy=False):
+
+    if (not speedy):
+        # time differences between reads
+        dt = times.reshape((-1, 1)) - times.reshape((1, -1))
+        df = reads.reshape((-1, 1)) - reads.reshape((1, -1))
+        d_noise = noise.reshape((-1, 1)) + noise.reshape((1, -1))
+    else:
+        # let's cut down the number of samples to use for pairwise fitting
+
+        # use all samples
+        n_select_x = numpy.arange(numpy.min([30, n_samples]))
+        n_select_y = numpy.arange(numpy.min([30, n_samples]))
+        pass
+        if (n_samples > 30):
+            # use first 50, plus every 3rd after wards
+            n_select_x = numpy.append(n_select_x, numpy.arange(30, numpy.min([150, n_samples, 4])))
+            n_select_x = numpy.append(n_select_x, numpy.arange(30, numpy.min([151, n_samples, 3])))
+            pass
+        if (n_samples > 150):
+            #  use first 50, plus every 5th to 150, then fewer based on prime numbers to make sure we get
+            #  unique pairings
+            n_select_x = numpy.append(n_select_x, numpy.arange(150, n_samples, 7))
+            n_select_x = numpy.append(n_select_x, numpy.arange(152, n_samples, 11))
+        # always include the last sample
+        n_select_x = numpy.append(n_select_x, [-1])
+        n_select_y = numpy.append(n_select_y, [-1])
+
+        dt = times[n_select_x].reshape((-1, 1)) - times[n_select_y].reshape((1, -1))
+        df = reads[n_select_x].reshape((-1, 1)) - reads[n_select_y].reshape((1, -1))
+        d_noise = noise[n_select_x].reshape((-1, 1)) + noise[n_select_y].reshape((1, -1))
+
+    return dt,df,d_noise
+
+
+
+def fit_pairwise_slope_samples(dt, df, d_noise):
+
+    useful_pairs = (dt > 0) & numpy.isfinite(df)
+    n_useful_pairs = numpy.sum(useful_pairs)
+    rates = (df / dt)[useful_pairs]
+    noises = d_noise[useful_pairs]
+    #     print(rates.shape)
+
+    # if (y >= 1890 and y <= 1907 and x >= 1405 and x <= 1414):
+    #     print("Dump %d %d" % (x, y))
+    #     numpy.savetxt("dump_%d_%d.p1" % (x, y),
+    #                   numpy.array([times, reads, noise]).T)
+    #     numpy.savetxt("dump_%d_%d.p2" % (x, y),
+    #                   numpy.array([rates, noises]).T)
+
+    try:
+        good = numpy.isfinite(rates) & numpy.isfinite(noises)
+        n_good = numpy.sum(good)
+
+        for it in range(3):
+            _stats = numpy.nanpercentile(rates[good], [16, 50, 84])
+            _med = _stats[1]
+            _sigma = 0.5 * (_stats[2] - _stats[0])
+            new_good = good & (rates > _med - 3 * _sigma) & (rates < _med + 3 * _sigma)
+            n_good = numpy.sum(new_good)
+            if (n_good < 10):
+                # if after this iteration we are left we too few good results then
+                # skip this iteration step and use all remaining data
+                break
+            else:
+                good = new_good
+
+        weights = 1. / noises
+        weighted = numpy.sum((rates * weights)[good]) / numpy.sum(weights[good])
+
+        # cube_results[:, y, x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
+    except Exception as e:
+        logger.debug("Encountered exception in pairfitting for x=%d, y=%d: %s" % (x, y, str(e)))
+        weighted, _med, _sigma, n_useful_pairs = numpy.NaN, numpy.NaN, numpy.NaN, numpy.NaN
+
+    return weighted, _med, _sigma, n_useful_pairs
+
 def worker__fit_pairwise_slopes(
         shmem_cube_corrected, shmem_results, cube_shape, results_shape,
         jobqueue, read_times, speedy=False, workername=None,
@@ -641,66 +719,12 @@ def worker__fit_pairwise_slopes(
             max_t = numpy.max(times)
             n_samples = times.shape[0]
 
-            if (not speedy):
-                # time differences between reads
-                dt = times.reshape((-1, 1)) - times.reshape((1, -1))
-                df = reads.reshape((-1, 1)) - reads.reshape((1, -1))
-                d_noise = noise.reshape((-1, 1)) + noise.reshape((1, -1))
-            else:
-                # let's cut down the number of samples to use for pairwise fitting
+            # get the pair-wise sampling of all parameters (times, reads, and noise)
+            dt,df,d_noise = select_samples(times, reads, noise, speedy)
 
-                # use all samples
-                n_select_x = numpy.arange(numpy.min([30, n_samples]))
-                n_select_y = numpy.arange(numpy.min([30, n_samples]))
-                pass
-                if (n_samples > 30):
-                    # use first 50, plus every 3rd after wards
-                    n_select_x = numpy.append(n_select_x, numpy.arange(30, numpy.min([150, n_samples, 4])))
-                    n_select_x = numpy.append(n_select_x, numpy.arange(30, numpy.min([151, n_samples, 3])))
-                    pass
-                if (n_samples > 150):
-                    #  use first 50, plus every 5th to 150, then fewer based on prime numbers to make sure we get
-                    #  unique pairings
-                    n_select_x = numpy.append(n_select_x, numpy.arange(150, n_samples, 7))
-                    n_select_x = numpy.append(n_select_x, numpy.arange(152, n_samples, 11))
-                # always include the last sample
-                n_select_x = numpy.append(n_select_x, [-1])
-                n_select_y = numpy.append(n_select_y, [-1])
-
-                dt = times[n_select_x].reshape((-1, 1)) - times[n_select_y].reshape((1, -1))
-                df = reads[n_select_x].reshape((-1, 1)) - reads[n_select_y].reshape((1, -1))
-                d_noise = noise[n_select_x].reshape((-1, 1)) + noise[n_select_y].reshape((1, -1))
-
-            useful_pairs = (dt > 0) & numpy.isfinite(df)
-            n_useful_pairs = numpy.sum(useful_pairs)
-            rates = (df / dt)[useful_pairs]
-            noises = d_noise[useful_pairs]
-            #     print(rates.shape)
-
-            try:
-                good = numpy.isfinite(rates)
-                n_good = numpy.sum(good)
-
-                for it in range(3):
-                    _stats = numpy.nanpercentile(rates[good], [16, 50, 84])
-                    _med = _stats[1]
-                    _sigma = 0.5 * (_stats[2] - _stats[0])
-                    new_good = good & (rates > _med - 3 * _sigma) & (rates < _med + 3 * _sigma)
-                    n_good = numpy.sum(new_good)
-                    if (n_good < 10):
-                        # if after this iteration we are left we too few good results then
-                        # skip this iteration step and use all remaining data
-                        break
-                    else:
-                        good = new_good
-
-                weights = 1. / noises
-                weighted = numpy.sum((rates * weights)[good]) / numpy.sum(weights[good])
-
-                cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
-            except Exception as e:
-                logger.debug("Encountered exception in pairfitting for x=%d, y=%d: %s" % (x,y,str(e)))
-                cube_results[:,y,x] = [numpy.NaN, numpy.NaN, numpy.NaN, n_useful_pairs, max_t]
+            #
+            weighted, _med, _sigma, n_useful_pairs = fit_pairwise_slope_samples(dt,df,d_noise)
+            cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
 
         t2 = time.time()
         logger.debug("Fitting pair-slopes for row %d done after %.3f seconds" % (y, t2-t1))
