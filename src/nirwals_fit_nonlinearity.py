@@ -69,10 +69,28 @@ def nonlinfit_worker(jobqueue, resultqueue, times, poly_order=3, ref_level=10000
 
             # identify suitable pixels, and fit with polynomial of specified degree
             good4fit = reads_raw < saturation_level
+            if (numpy.sum(good4fit) > 50):
+                # only if we have enough data skip the first few reads -- these
+                # might be a affected by a reset anomaly and thus are less trustworthy
+                good4fit[times < 7.] = False
 
-            nonlin_results = numpy.polyfit(reads_refpixelcorr[good4fit], (times*slope_reflevel)[good4fit],
-                                           deg=poly_order, full=True)
-            nonlin_bestfit = nonlin_results[0]
+
+            nonlin_bestfit = [1.00, 0.00]
+            for iteration in range(4):
+                # apply corrections from prior iteration
+                reads_refpixelcorr += nonlin_bestfit[-1]
+                slope_reflevel /= nonlin_bestfit[-2]
+
+                nonlin_results = numpy.polyfit(reads_refpixelcorr[good4fit], (times*slope_reflevel)[good4fit],
+                                               deg=poly_order, full=True)
+                nonlin_bestfit = nonlin_results[0]
+
+            # now convert all poly coefficients such that the linear term is x1.00
+            p1 = nonlin_bestfit[-2]
+            for p in range(poly_order):
+                nonlin_bestfit[-(p+2)] /= numpy.power(p1, p+1)
+            # print('corrected:', nonlin_bestfit)
+
         except Exception as e: # numpy.linalg.LinAlgError as e:
             logger.warning("Unable to fit non-linearity for x=%d  y=%d (%s)" % (x,y, str(e)))
             nonlin_bestfit = numpy.full((poly_order+1), fill_value=numpy.NaN)
