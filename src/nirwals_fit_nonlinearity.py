@@ -119,7 +119,7 @@ if __name__ == "__main__":
                          help="limit number of files to load for processing")
     cmdline.add_argument("--nonlinearity", dest="nonlinearity_fn", type=str, default=None,
                          help="non-linearity correction coefficients (3-d FITS cube)")
-    cmdline.add_argument("--saturation", dest="saturation", default=62000,
+    cmdline.add_argument("--saturation", dest="saturation", default=55000,
                          help="saturation value/file")
     cmdline.add_argument("--reflevel", dest="reflevel", default=10000, type=float,
                          help="saturation value/file")
