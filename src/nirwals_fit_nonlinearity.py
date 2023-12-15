@@ -121,6 +121,8 @@ if __name__ == "__main__":
                          help="non-linearity correction coefficients (3-d FITS cube)")
     cmdline.add_argument("--saturation", dest="saturation", default=62000,
                          help="saturation value/file")
+    cmdline.add_argument("--reflevel", dest="reflevel", default=10000, type=float,
+                         help="saturation value/file")
     cmdline.add_argument("--ncores", dest="n_cores", default=multiprocessing.cpu_count(),
                          help="number of CPU cores to use for parallel fitting")
     cmdline.add_argument("--refpixel", dest="ref_pixel_mode", default='blockyslope2',
@@ -179,8 +181,8 @@ if __name__ == "__main__":
                             resultqueue=resultqueue,
                             times=rss.raw_read_times[:rss.cube_raw.shape[0]],
                             poly_order=poly_order,
-                            ref_level=10000,
-                            saturation_level=55000,
+                            ref_level=args.reflevel,
+                            saturation_level=args.saturation,
                             workername="Worker_%03d" % (n+1)),
                 daemon=True
             )
