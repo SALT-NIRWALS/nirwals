@@ -23,7 +23,7 @@ from nirwals import NIRWALS
 def nonlinfit_worker(jobqueue, resultqueue, times, poly_order=3, ref_level=10000, saturation_level=55000, workername="NonLinFitWorker"):
 
     logger = logging.getLogger(workername)
-    logger.info("Starting worker %s" % (workername))
+    logger.debug("Starting worker %s" % (workername))
 
     while(True):
         t1 = time.time()
@@ -208,7 +208,10 @@ if __name__ == "__main__":
         for p in worker_processes:
             p.join()
 
-        out_fn = "nonlinpoly.fits"
+        if (args.nonlinearity_fn is None):
+            out_fn = "nonlinpoly.fits"
+        else:
+            out_fn = args.nonlinearity_fn
         logger.info("Writing correction coefficients to output FITS (%s)" % (out_fn))
         pyfits.PrimaryHDU(data=output_cube).writeto(out_fn, overwrite=True)
 
