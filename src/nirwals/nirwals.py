@@ -570,7 +570,8 @@ def worker__nonlinearity_correction(
         # get correction from data
 
         linecube = numpy.array(cube_corrected[:,y,:])
-        zero_offset = numpy.min(linecube, axis=0)
+        linecube[linecube > 50000] = numpy.NaN  # mask out all saturated pixels
+        zero_offset = numpy.nanmin(linecube, axis=0)
         # print(zero_offset.shape)
         linecube -= zero_offset
 
@@ -748,7 +749,7 @@ class NIRWALS(object):
 
     def __init__(self, fn, max_number_files=-1,
                  saturation=None,
-                 saturation_level=62000,
+                 saturation_level=50000,
                  saturation_fraction=0.25, saturation_percentile=95,
                  use_reference_pixels='none',
                  mask_saturated_pixels=False,
