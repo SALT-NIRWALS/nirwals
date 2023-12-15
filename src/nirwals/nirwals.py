@@ -667,7 +667,7 @@ def fit_pairwise_slope_samples(dt, df, d_noise):
 
         # cube_results[:, y, x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
     except Exception as e:
-        logger.debug("Encountered exception in pairfitting for x=%d, y=%d: %s" % (x, y, str(e)))
+        # logger.debug("Encountered exception in pairfitting for x=%d, y=%d: %s" % (x, y, str(e)))
         weighted, _med, _sigma, n_useful_pairs = numpy.NaN, numpy.NaN, numpy.NaN, numpy.NaN
 
     return weighted, _med, _sigma, n_useful_pairs
@@ -819,12 +819,15 @@ class NIRWALS(object):
         self.n_cores = n_cores if (n_cores is not None and n_cores > 0) else multiprocessing.cpu_count()
         self.logger.info("Using %d CPU cores/threads for parallel processing" % (self.n_cores))
 
+        self.logger.debug("Reading exposure setup")
         self.read_exposure_setup()
         self.speedy = speedy
 
+        self.logger.debug("Retrieving filelist")
         self.get_full_filelist()
 
         try:
+            self.logger.debug("Allocating shared memory")
             self.allocate_shared_memory()
         except FileExistsError as e:
             self.logger.critical(
@@ -911,8 +914,12 @@ class NIRWALS(object):
             self.logger.critical("Unable to get exposure setup without valid input filename")
 
         # read the input file as reference file
-        self.ref_hdulist = pyfits.open(self.fn)
-        self.ref_header = self.ref_hdulist[0].header
+        self.logger.debug("Reading setup from %s" % (os.path.abspath(self.fn)))
+        try:
+            self.ref_hdulist = pyfits.open(self.fn)
+            self.ref_header = self.ref_hdulist[0].header
+        except:
+            self.logger.critical("Unable to open input file (%s)" % (os.path.abspath(fn)))
         self.provenance.add("ref-header", self.fn)
 
         # image dimensions
@@ -972,7 +979,7 @@ class NIRWALS(object):
         # setup the data-cube to hold all the data
         if (max_number_files is not None and max_number_files > 0 and self.n_groups > max_number_files):
             self.n_groups = max_number_files
-            print("Limiting input data to %d read-groups" % (max_number_files))
+            self.logger.info("Limiting input data to %d read-groups" % (max_number_files))
 
         # self.image_stack_raw = numpy.full(
         #     (self.n_reads, self.n_groups, self.ny, self.nx),
@@ -1209,7 +1216,7 @@ class NIRWALS(object):
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
         self.logger.info("Done loading all files")
 
-        self.logger.info("Typical interval between reads: %.3f seconds" % (
+        self.logger.info("Typical interval between reads: %.5f seconds" % (
             numpy.nanmean(numpy.diff(self.read_times[1:-1]))))
 
         # pyfits.PrimaryHDU(data=self.image_stack).writeto("raw_stack_dmp.fits", overwrite=True)
@@ -1718,14 +1725,14 @@ class NIRWALS(object):
             worker_processes.append(p)
 
         # wait for work to be done
-        self.logger.info("Waiting for all pairwise slope-fitting jobs to finish")
+        self.logger.info("Waiting for all URG-fitting jobs to finish")
         jobqueue.join()
         for p in worker_processes:
             p.join()
 
         t2 = time.time()
 
-        self.logger.info("Pairwise slope-fitting complete after taking %.3f seconds" % (t2-t1))
+        self.logger.info("Up-the-ramp slope-fitting complete after taking %.3f seconds" % (t2-t1))
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
         return
 
