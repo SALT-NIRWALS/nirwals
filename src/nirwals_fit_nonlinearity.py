@@ -140,11 +140,13 @@ if __name__ == "__main__":
     rss = NIRWALS(fn, saturation=saturation_fn,
                   max_number_files=args.max_number_files,
                   use_reference_pixels=args.ref_pixel_mode,)
+
+    rss.load_all_files()
+
     rss.apply_reference_pixel_corrections()
     # rss.reduce(write_dumps=False)
     # rss.write_results()
 
-    rss.load_all_files()
     # rss.subtract_first_read()
 
     if (not args.verify):
