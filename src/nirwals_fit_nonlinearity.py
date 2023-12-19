@@ -20,10 +20,27 @@ from nirwals import NIRWALS
 
 
 
-def nonlinfit_worker(jobqueue, resultqueue, times, poly_order=3, ref_level=10000, saturation_level=55000, workername="NonLinFitWorker"):
+def nonlinfit_worker(jobqueue, resultqueue, times,
+                     shmem_cube_raw, shmem_cube_refpixelcorr, shmem_cube_nonlinpoly, cube_shape,
+                     poly_order=3, ref_level=10000, saturation_level=55000, workername="NonLinFitWorker"):
 
     logger = logging.getLogger(workername)
     logger.debug("Starting worker %s" % (workername))
+
+    # make the shared memory available as numpy arrays
+    cube_raw = numpy.ndarray(
+        shape=cube_shape, dtype=numpy.float32,
+        buffer=shmem_cube_raw.buf
+    )
+    cube_refpixelcorr = numpy.ndarray(
+        shape=cube_shape, dtype=numpy.float32,
+        buffer=shmem_cube_refpixelcorr.buf
+    )
+    cube_nonlinpoly = numpy.ndarray(
+        shape=(poly_order+1, cube_shape[1], cube_shape[2]), dtype=numpy.float32,
+        buffer=shmem_cube_nonlinpoly.buf
+    )
+
 
     while(True):
         t1 = time.time()
@@ -37,7 +54,11 @@ def nonlinfit_worker(jobqueue, resultqueue, times, poly_order=3, ref_level=10000
             jobqueue.task_done()
             break
 
-        x, y, reads_refpixelcorr, reads_raw = job
+        # x, y, reads_refpixelcorr, reads_raw = job
+        x,y = job
+        reads_refpixelcorr = cube_refpixelcorr[:,y,x]
+        reads_raw = cube_raw[:,y,x]
+
         # logger.debug("x=%d, y=%d: read:%s raw:%s times:%s" % (x,y,str(reads_refpixelcorr.shape), str(reads_raw.shape), str(times.shape)))
         # print(times)
         # print(reads_refpixelcorr)
@@ -98,10 +119,16 @@ def nonlinfit_worker(jobqueue, resultqueue, times, poly_order=3, ref_level=10000
 
         t2 = time.time()
 
-        resultqueue.put((x,y,nonlin_bestfit,t2-t1))
+        cube_nonlinpoly[:, y, x] = nonlin_bestfit
+        #resultqueue.put((x, y, nonlin_bestfit, t2 - t1))
+        resultqueue.put((x, y, t2 - t1, slope_reflevel))
+
         jobqueue.task_done()
 
-    logger.info("Shutting down worker %s" % (workername))
+    shmem_cube_raw.close()
+    shmem_cube_refpixelcorr.close()
+    shmem_cube_nonlinpoly.close()
+    logger.debug("Shutting down worker %s" % (workername))
 
 
 
@@ -137,36 +164,55 @@ if __name__ == "__main__":
 
     fn = args.files[0]
     saturation_fn = args.saturation
+    logger.info("Initializing data")
     rss = NIRWALS(fn, saturation=saturation_fn,
                   max_number_files=args.max_number_files,
                   use_reference_pixels=args.ref_pixel_mode,)
-
+    logger.info("Reading files")
     rss.load_all_files()
 
+    logger.info("Applying reference pixel corrections")
     rss.apply_reference_pixel_corrections()
     # rss.reduce(write_dumps=False)
     # rss.write_results()
 
-    # rss.subtract_first_read()
+    logger.info("Allocating shared memory for output")
+    poly_order = 5
+
+    dummy = numpy.array([], dtype=numpy.float32)
+    cube_shape = rss.cube_raw.shape
+    shmem_nonlinpoly = multiprocessing.shared_memory.SharedMemory(
+        name='nonlinpoly', create=True,
+        size=(dummy.itemsize * (poly_order+1) * cube_shape[1] * cube_shape[2]),
+    )
+    result_nonlinpoly = numpy.ndarray(
+        shape=(poly_order+1, cube_shape[1], cube_shape[2]),
+        dtype=numpy.float32, buffer=shmem_nonlinpoly.buf)
 
     if (not args.verify):
         # rss.fit_nonlinearity(ref_frame_id=4, make_plot=False)
 
+        logger.info("Distributing work for parallel processing")
         jobqueue = multiprocessing.JoinableQueue()
         resultqueue = multiprocessing.Queue()
         times = rss.raw_read_times
+        shape = rss.cube_raw.shape
 
-        poly_order = 5
-        logger.info("Starting to fill queue")
+        out_processing_time = numpy.full((2048,2048), fill_value=numpy.NaN)
+        out_refslope = numpy.full((2048, 2048), fill_value=numpy.NaN)
+
+        # logger.info("Starting to fill queue")
         n_jobs = 0
         for x,y in itertools.product(range(2048), range(2048)):
+#        for x, y in itertools.product(range(1140,1240), range(1700,1720)):
+#        for x, y in itertools.product(range(1040, 1340), range(1600, 1820)):
 
             # while we use cube_linearized, we did not actually apply any nonlinearity corrections
-            reads_raw = rss.cube_raw[:, y,x]
-            reads_refpixelcorr = rss.cube_linearized[:, y,x]
+            # reads_raw = rss.cube_raw[:, y,x]
+            # reads_refpixelcorr = rss.cube_linearized[:, y,x]
             # print(reads_raw.shape, reads_refpixelcorr.shape)
 
-            jobqueue.put((x, y, reads_raw, reads_refpixelcorr))
+            jobqueue.put((x, y)) #, reads_raw, reads_refpixelcorr))
             n_jobs += 1
 
             # if (n_jobs > 100000):
@@ -182,6 +228,10 @@ if __name__ == "__main__":
                 kwargs=dict(jobqueue=jobqueue,
                             resultqueue=resultqueue,
                             times=rss.raw_read_times[:rss.cube_raw.shape[0]],
+                            shmem_cube_raw=rss.shmem_cube_raw,
+                            shmem_cube_refpixelcorr=rss.shmem_cube_linearized,
+                            shmem_cube_nonlinpoly=shmem_nonlinpoly,
+                            cube_shape=rss.cube_raw.shape,
                             poly_order=poly_order,
                             ref_level=args.reflevel,
                             saturation_level=args.saturation,
@@ -196,8 +246,10 @@ if __name__ == "__main__":
         logger.info("Gathering results")
         output_cube = numpy.full((poly_order+1,2048,2048), fill_value=numpy.NaN)
         for n in range(n_jobs):
-            (x,y,polyfit,cpu_time) = resultqueue.get()
-            output_cube[:,y,x] = polyfit
+            (x,y,cpu_time,reflevel) = resultqueue.get()
+            out_processing_time[y,x] = cpu_time
+            out_refslope[y,x] = reflevel
+            # output_cube[:,y,x] = polyfit
             # print(polyfit)
 
         # wait for all work to be done
@@ -213,8 +265,10 @@ if __name__ == "__main__":
         else:
             out_fn = args.nonlinearity_fn
         logger.info("Writing correction coefficients to output FITS (%s)" % (out_fn))
-        pyfits.PrimaryHDU(data=output_cube).writeto(out_fn, overwrite=True)
+        pyfits.PrimaryHDU(data=result_nonlinpoly).writeto(out_fn, overwrite=True)
 
+        pyfits.PrimaryHDU(data=out_processing_time).writeto(out_fn[:-5]+"__cputime.fits", overwrite=True)
+        pyfits.PrimaryHDU(data=out_refslope).writeto(out_fn[:-5]+"__refslope.fits", overwrite=True)
         logger.info("All done!")
 
     else:
@@ -301,6 +355,11 @@ if __name__ == "__main__":
                 pdf.savefig(fig)
                 # fig.savefig()
                 #
+
+    # Release shared memory
+    del rss
+    shmem_nonlinpoly.close()
+    shmem_nonlinpoly.unlink()
 
     # rss.plot_pixel_curve(818,1033)
     # rss.plot_pixel_curve(1700,555)
