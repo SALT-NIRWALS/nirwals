@@ -297,7 +297,7 @@ if __name__ == "__main__":
         with open(list_fn, "r") as lf:
             lines = lf.readlines()
             for l in lines:
-                if (l.strip().startswith("#")):
+                if (l.strip().startswith("#") or len(l.strip() < 1)):
                     continue
                 fn = l.strip().split()[0]
                 if (os.path.isfile(fn)):
