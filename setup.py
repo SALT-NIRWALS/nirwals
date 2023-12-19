@@ -28,6 +28,7 @@ setup(
         'pandas',
         'scipy',
         'pyvo',
+        'watchdog',
         ],
 
     )
