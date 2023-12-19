@@ -54,23 +54,13 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
             jobqueue.task_done()
             break
 
-        # x, y, reads_refpixelcorr, reads_raw = job
         x,y = job
         reads_refpixelcorr = cube_refpixelcorr[:,y,x]
         reads_raw = cube_raw[:,y,x]
 
-        # logger.debug("x=%d, y=%d: read:%s raw:%s times:%s" % (x,y,str(reads_refpixelcorr.shape), str(reads_raw.shape), str(times.shape)))
-        # print(times)
-        # print(reads_refpixelcorr)
-        # print(reads_raw)
-
         # subtract off any residual offsets (read for t=0 should be 0)
         reads_offset = numpy.nanmin(reads_refpixelcorr)
         reads_refpixelcorr -= reads_offset
-
-        # numpy.savetxt("dummydump_%04d_%04d.deleteme" % (x,y), numpy.array([
-        #     times,reads_refpixelcorr,reads_raw
-        # ]).T)
 
         try:
             # first, get an idealized target slope for the actual intensity
@@ -173,8 +163,6 @@ if __name__ == "__main__":
 
     logger.info("Applying reference pixel corrections")
     rss.apply_reference_pixel_corrections()
-    # rss.reduce(write_dumps=False)
-    # rss.write_results()
 
     logger.info("Allocating shared memory for output")
     poly_order = 5
@@ -204,22 +192,13 @@ if __name__ == "__main__":
         # logger.info("Starting to fill queue")
         n_jobs = 0
         for x,y in itertools.product(range(2048), range(2048)):
-#        for x, y in itertools.product(range(1140,1240), range(1700,1720)):
-#        for x, y in itertools.product(range(1040, 1340), range(1600, 1820)):
 
             # while we use cube_linearized, we did not actually apply any nonlinearity corrections
-            # reads_raw = rss.cube_raw[:, y,x]
-            # reads_refpixelcorr = rss.cube_linearized[:, y,x]
-            # print(reads_raw.shape, reads_refpixelcorr.shape)
-
-            jobqueue.put((x, y)) #, reads_raw, reads_refpixelcorr))
+            jobqueue.put((x, y))
             n_jobs += 1
 
-            # if (n_jobs > 100000):
-            #     break
-            # break
         logger.info("Done with filling queue")
-        print("STACK: %d" % (rss.cube_raw.shape[0]))
+        logger.debug("STACK: %d" % (rss.cube_raw.shape[0]))
 
         worker_processes = []
         for n in range(args.n_cores):
