@@ -46,7 +46,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
     def __init__(self, incoming_queue, staging_dir, nonlinearity_file, refpixelmode, samp_cli=None):
         super(NirwalsOnTheFlyReduction, self).__init__()
 
-        self.logger = logging.getLogger("StalkerProcess")
+        self.logger = logging.getLogger("WatchdogProcess")
 
         self.current_base = None
         self.zero_read = None
@@ -199,7 +199,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
 
 samp_metadata = {
-    "samp.name": "NIRWALS_stalker",
+    "samp.name": "NIRWALS_watchdog",
     "samp.description.text": "NIRWALS directory watcher and on-the-fly reduction",
     "samp.icon.url": "https://avatars.githubusercontent.com/u/95205451?s=48&v=4",
     "samp.documentation.url": "https://github.com/SALT-NIRWALS/nirwals/",
@@ -218,7 +218,7 @@ if __name__ == "__main__":
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
-    logger = logging.getLogger("NirwalsStalker")
+    logger = logging.getLogger("NirwalsWatchdog")
 
     cmdline = argparse.ArgumentParser()
     cmdline.add_argument("--stage", dest="staging_dir", default="./",
@@ -249,13 +249,13 @@ if __name__ == "__main__":
 
     logger.info("Starting on-the-fly reduction process")
     job_queue = multiprocessing.JoinableQueue()
-    stalker_worker = NirwalsOnTheFlyReduction(
+    watchdog_worker = NirwalsOnTheFlyReduction(
         job_queue, staging_dir=args.staging_dir,
         nonlinearity_file=args.nonlinearity_fn,
         refpixelmode=args.ref_pixel_mode,
         samp_cli=samp_cli)
-    stalker_worker.daemon = True
-    stalker_worker.start()
+    watchdog_worker.daemon = True
+    watchdog_worker.start()
 
     logger.info("Starting to watch directory for new files: %s" % (path2watch))
     event_handler = NirwalsQuicklook(job_queue)
@@ -297,6 +297,6 @@ if __name__ == "__main__":
         logger.debug("Shutting down on-the-fly reduction")
         job_queue.put(None)
         job_queue.close()
-        stalker_worker.join()
+        watchdog_worker.join()
 
     logger.info("All shut down, good bye & have a great day!")
