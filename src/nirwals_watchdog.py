@@ -229,23 +229,49 @@ if __name__ == "__main__":
                          help="reference pixels mode [default: NO]")
     cmdline.add_argument("--test", dest="test", default=None,
                          help="test mode; syntax: --test=delay:@filelist")
+    cmdline.add_argument("--nowait", dest="no_wait_for_samp", default=False, action='store_true',
+                         help="do not wait for SAMP server")
     cmdline.add_argument("directory", nargs=1, help="name of directory to watch")
     args = cmdline.parse_args()
 
     path2watch = args.directory[0]
     # print(path2watch)
 
-    logger.info("Connection to ds9 via SAMP protocol")
+    logger.info("Connecting to ds9 via SAMP protocol")
     samp_cli = None
-    try:
-        samp_cli = sampy.SAMPIntegratedClient(metadata=samp_metadata)
-        samp_cli.connect()
+    start_waiting = time.time()
+    last_update = 0
+    while (True):
+        try:
+            samp_cli = sampy.SAMPIntegratedClient(metadata=samp_metadata)
+            samp_cli.connect()
+            if (not samp_cli.is_connected):
+                samp_cli = None
+        except astropy.samp.errors.SAMPHubError as e:
+            samp_cli = None
+        except Exception as e:
+            logger.critical("Error while establishing SAMP link: %s" % (str(e)))
+            pass
+        if (samp_cli is None):
+            if (args.no_wait_for_samp):
+                logger.critical("No SAMPHub found, automatic forwarding to ds9 disabled")
+                break
+            else:
+                t = time.time()
+                if (last_update == 0):
+                    logger.info("No SAMPHub found, waiting for SAMPhub to come online")
+                    last_update = t
+                elif ((t-last_update) > 60):
+                    logger.info("Still no SAMPHub found, continuing to wait for SAMPhub to come online (total %d seconds by now)" % (t-start_waiting))
+                    last_update = t
+                time.sleep(1)
+        else:
+            logger.info("Successfully connected to SAMPhub")
+            break
+
+    # Open a frame in ds9
+    if (samp_cli is not None):
         samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
-    except astropy.samp.errors.SAMPHubError as e:
-        logger.warning("No SAMPHub found, automatic forwarding to ds9 disabled")
-    except Exception as e:
-        logger.critical("Error while establishing SAMP link: %s" % (str(e)))
-        pass
 
     logger.info("Starting on-the-fly reduction process")
     job_queue = multiprocessing.JoinableQueue()
