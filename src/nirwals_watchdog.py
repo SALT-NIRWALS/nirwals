@@ -16,6 +16,7 @@ import watchdog
 import watchdog.events
 import watchdog.observers
 
+import sysv_ipc
 import time
 import nirwals
 
@@ -43,7 +44,7 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
 
 class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
-    def __init__(self, incoming_queue, staging_dir, nonlinearity_file, refpixelmode, samp_cli=None):
+    def __init__(self, incoming_queue, staging_dir, nonlinearity_file, refpixelmode, samp_cli=None, shmem_ds9=None, force_write=False):
         super(NirwalsOnTheFlyReduction, self).__init__()
 
         self.logger = logging.getLogger("WatchdogProcess")
@@ -56,6 +57,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         self.read_minimum_exptime = None
         self.latest_result = None
         self.saturated = None
+        self.force_write = force_write
 
         self.staging_dir = staging_dir
         self.incoming_queue = incoming_queue
@@ -74,6 +76,25 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             ))
 
         self.samp_cli = samp_cli
+
+        self.shmem_ds9 = shmem_ds9
+        self.shmem_buf = None
+        if (shmem_ds9 is not None):
+            class Dummy(object): pass
+            d = Dummy()
+            d.__array_interface__ = {
+                 'data' : (shmem_ds9.address, False),
+                 'typestr' : "=f4", #FloatType, #"uint8", #numpy.uint8.str,
+                 'descr' : "", #"UINT8", #numpy.uint8.descr,
+                 'shape' : (2048,2048), #(n_bytes//4,), #(self.n_bytes/4), #
+                 'strides' : None,
+                 'version' : 3
+            }
+            self.shmem_buf = numpy.asarray(d) #.reshape((ny,nx))
+            if (samp_cli is not None):
+                self.samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
+                self.samp_cli.enotify_all(mtype='ds9.set', cmd='shm array shmid %d [xdim=%d,ydim=%d,bitpix=-32]' % (
+                    self.shmem_ds9.id,2048,2048))
 
     def start_new_sequence(self, filename):
         self.logger.info("Starting new sequence: %s" % (filename))
@@ -147,11 +168,13 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
         hdulist[0].data = self.latest_result
 
-        out_fn, ext = os.path.splitext(fn)
-        out_fn += "__qred.fits"
-        stage_fn = os.path.abspath(os.path.join(self.staging_dir, out_fn))
-        self.logger.debug("Writing quick-reduced frame to %s" % (stage_fn))
-        hdulist.writeto(stage_fn, overwrite=True)
+        out_fn = None
+        if (self.shmem_ds9 is None or self.force_write):
+            out_fn, ext = os.path.splitext(fn)
+            out_fn += "__qred.fits"
+            stage_fn = os.path.abspath(os.path.join(self.staging_dir, out_fn))
+            self.logger.debug("Writing quick-reduced frame to %s" % (stage_fn))
+            hdulist.writeto(stage_fn, overwrite=True)
 
         if (self.samp_cli is not None):
             # samp_msg = {
@@ -162,11 +185,17 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             #     }
             # }
             # self.samp_cli.notify_all(samp_msg)
-            self.samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
-            self.samp_cli.enotify_all(mtype='ds9.set', cmd='preserve pan yes')
-            self.samp_cli.enotify_all(mtype='ds9.set', cmd='preserve region yes')
-            self.samp_cli.enotify_all(mtype='ds9.set', cmd='fits %s' % (stage_fn))
-            # self.samp_cli.enotify_all(mtype='ds9.set', cmd='array file://%s' % (os.path.abspath(stage_fn)))
+            if (self.shmem_ds9 is not None):
+                self.shmem_buf[:,:] = data[:,:]
+                self.samp_cli.enotify_all(mtype='ds9.set', cmd='update now')
+                self.logger.debug("Using shared memory, telling ds9 to update")
+            else:
+                self.logger.debug("Sending command to load new FITS (%s) to ds9" % (stage_fn))
+                self.samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
+                self.samp_cli.enotify_all(mtype='ds9.set', cmd='preserve pan yes')
+                self.samp_cli.enotify_all(mtype='ds9.set', cmd='preserve region yes')
+                self.samp_cli.enotify_all(mtype='ds9.set', cmd='fits %s' % (stage_fn))
+                # self.samp_cli.enotify_all(mtype='ds9.set', cmd='array file://%s' % (os.path.abspath(stage_fn)))
 
         return out_fn
 
@@ -242,6 +271,10 @@ if __name__ == "__main__":
                          help="test mode; syntax: --test=delay:@filelist")
     cmdline.add_argument("--nowait", dest="no_wait_for_samp", default=False, action='store_true',
                          help="do not wait for SAMP server")
+    cmdline.add_argument("--shmem", dest="use_shared_memory", default=False, action='store_true',
+                         help="use shared memory to display files in ds9")
+    cmdline.add_argument("--write", dest="write_reduced", default=False, action='store_true',
+                         help="write reduced frames (even if not needed)")
     cmdline.add_argument("directory", nargs=1, help="name of directory to watch")
     args = cmdline.parse_args()
 
@@ -284,13 +317,28 @@ if __name__ == "__main__":
     if (samp_cli is not None):
         samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
 
+    shmem_ds9 = None
+    if (args.use_shared_memory):
+        logger.info("Allocating shared memory for interaction with ds9")
+        dummy = numpy.array([], dtype=numpy.float32)
+        nx, ny = 2048, 2048
+        n_bytes = dummy.itemsize * nx * ny
+        shmem_ds9 = sysv_ipc.SharedMemory(
+            key=None, mode=0o666, size=n_bytes,
+            flags=sysv_ipc.IPC_CREAT | sysv_ipc.IPC_EXCL)
+    else:
+        logger.info("Writing reduced files to forward to ds9")
+
     logger.info("Starting on-the-fly reduction process")
     job_queue = multiprocessing.JoinableQueue()
     watchdog_worker = NirwalsOnTheFlyReduction(
         job_queue, staging_dir=args.staging_dir,
         nonlinearity_file=args.nonlinearity_fn,
         refpixelmode=args.ref_pixel_mode,
-        samp_cli=samp_cli)
+        samp_cli=samp_cli,
+        shmem_ds9=shmem_ds9,
+        force_write=args.write_reduced,
+    )
     watchdog_worker.daemon = True
     watchdog_worker.start()
 
