@@ -154,8 +154,19 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         hdulist.writeto(stage_fn, overwrite=True)
 
         if (self.samp_cli is not None):
+            # samp_msg = {
+            #     'samp.mtype': 'image.load.fits',
+            #     'samp.params': {
+            #         'url': 'file://'+os.path.abspath(stage_fn),
+            #         'name': 'latest NIRWALS frame',
+            #     }
+            # }
+            # self.samp_cli.notify_all(samp_msg)
             self.samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
+            self.samp_cli.enotify_all(mtype='ds9.set', cmd='preserve pan yes')
+            self.samp_cli.enotify_all(mtype='ds9.set', cmd='preserve region yes')
             self.samp_cli.enotify_all(mtype='ds9.set', cmd='fits %s' % (stage_fn))
+            # self.samp_cli.enotify_all(mtype='ds9.set', cmd='array file://%s' % (os.path.abspath(stage_fn)))
 
         return out_fn
 
