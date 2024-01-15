@@ -1387,7 +1387,7 @@ class NIRWALS(object):
 
         pass
 
-    def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False):
+    def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False, group_cutoff=None):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
         self.logger.info("Done loading all files")
@@ -1417,7 +1417,9 @@ class NIRWALS(object):
         # self.logger.info("Dumping corrected datacube to file")
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
 
-        self.fit_pairwise_slopes()
+        # self.fit_pairwise_slopes(algorithm="rauscher2007")
+        self.fit_pairwise_slopes(algorithm="linreg", group_cutoff=group_cutoff)
+        # self.fit_pairwise_slopes(algorithm="pairwise_slopes")
 
     def dump_save(self, imgtype=None):
 
@@ -1898,7 +1900,7 @@ class NIRWALS(object):
 
         for n in range(n_workers):
             p = multiprocessing.Process(
-                target=worker__fit_pairwise_slopes,
+                target=worker_method,
                 kwargs=dict(
                     shmem_cube_corrected=self.shmem_cube_linearized,
                     shmem_results=self.shmem_cube_results,
@@ -1908,6 +1910,7 @@ class NIRWALS(object):
                     workername="PairSlopeWorker_%03d" % (n+1),
                     read_times=self.read_times,
                     speedy=self.speedy,
+                    group_cutoff=group_cutoff,
                 ),
                 daemon=True
             )
