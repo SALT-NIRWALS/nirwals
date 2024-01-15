@@ -672,6 +672,182 @@ def fit_pairwise_slope_samples(dt, df, d_noise):
 
     return weighted, _med, _sigma, n_useful_pairs
 
+
+
+def worker__fit_rauscher2007(
+        shmem_cube_corrected, shmem_results, cube_shape, results_shape,
+        jobqueue, read_times, speedy=False, workername=None, group_cutoff=None,
+):
+    logger = logging.getLogger(workername if workername is not None else "Rauscher2007worker")
+    logger.debug("Starting worker")
+
+    cube_linearized = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
+                             buffer=shmem_cube_corrected.buf)
+    cube_results = numpy.ndarray(shape=results_shape, dtype=numpy.float32,
+                             buffer=shmem_results.buf)
+
+    while (True):
+        try:
+            job = jobqueue.get()
+            if (job is None):
+                # this is the termination signal
+                jobqueue.task_done()
+                break
+        except queue.Empty as e:
+            logger.warning("job queue empty (%s)" % (e))
+            break
+
+        y = job
+        logger.debug("Starting to fit pairwise slopes for row %d" % (y))
+
+        t1 = time.time()
+        # get correction from data
+
+        for x in range(4, cube_results.shape[2]-4 ):
+
+            reads = cube_linearized[:,y,x]
+            noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
+            times = numpy.array(read_times)
+
+            good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0)
+            if (group_cutoff is not None and group_cutoff>0):
+                good_reads[group_cutoff:] = False
+
+            if (numpy.sum(good_reads) < 2):
+                # not enough data to do anything with
+                continue
+
+            times = times[good_reads]
+            reads = reads[good_reads]
+            noise = noise[good_reads]
+            n = numpy.sum(good_reads)
+
+            rauscher_b = (n * numpy.sum(times*reads) - numpy.sum(times)*numpy.sum(reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+            rauscher_a = (numpy.sum(times**2)*numpy.sum(reads) - numpy.sum(times)*numpy.sum(times*reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+
+            max_t = numpy.max(times)
+            n_samples = times.shape[0]
+
+            # get the pair-wise sampling of all parameters (times, reads, and noise)
+            weighted = rauscher_b
+            _med = 0
+            _sigma = 0
+            n_useful_pairs = n
+
+            cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
+
+        t2 = time.time()
+        logger.debug("Fitting rauscher2007 for row %d done after %.3f seconds" % (y, t2-t1))
+
+        jobqueue.task_done()
+
+    logger.debug("Shutting down")
+    shmem_results.close()
+    shmem_cube_corrected.close()
+
+
+
+def __fit_linear_regression(p, times):
+    return p[0] + p[1]*times
+def __fit_linear_regression_error(p, times, reads, noise):
+    fit = __fit_linear_regression(p, times)
+    sigma = (reads - fit) / noise
+    return sigma**2
+
+def worker__fit_linear_regression(
+        shmem_cube_corrected, shmem_results, cube_shape, results_shape,
+        jobqueue, read_times, speedy=False, workername=None, group_cutoff=None,
+):
+    logger = logging.getLogger(workername if workername is not None else "LinearRegressionWorker")
+    logger.debug("Starting worker")
+
+    cube_linearized = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
+                             buffer=shmem_cube_corrected.buf)
+    cube_results = numpy.ndarray(shape=results_shape, dtype=numpy.float32,
+                             buffer=shmem_results.buf)
+
+    while (True):
+        try:
+            job = jobqueue.get()
+            if (job is None):
+                # this is the termination signal
+                jobqueue.task_done()
+                break
+        except queue.Empty as e:
+            logger.warning("job queue empty (%s)" % (e))
+            break
+
+        y = job
+        logger.debug("Starting to fit linear regressions for row %d" % (y))
+
+        t1 = time.time()
+        # get correction from data
+
+        for x in range(4, cube_results.shape[2]-4 ):
+
+            reads = cube_linearized[:,y,x]
+            noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
+            times = numpy.array(read_times)
+
+            good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0) & (noise>0)
+            if (group_cutoff is not None and group_cutoff>0):
+                good_reads[group_cutoff:] = False
+
+            n = numpy.sum(good_reads)
+            if (n < 2):
+                # not enough data to do anything with
+                continue
+
+            if (n > 10):
+                # we have enough data, skip the first N reads
+                N = 3
+                good_reads[:N] = False
+                n -= N
+
+            times = times[good_reads]
+            reads = reads[good_reads]
+            noise = noise[good_reads]
+
+            slope = (n * numpy.sum(times*reads) - numpy.sum(times)*numpy.sum(reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+            intercept = (numpy.sum(times**2)*numpy.sum(reads) - numpy.sum(times)*numpy.sum(times*reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+            p0 = [intercept, slope]
+
+            best_fit = [numpy.NaN, numpy.NaN]
+            perr = [numpy.NaN, numpy.NaN]
+            if (n >= 2):
+                # Only attempt to fit a slope if we have at least 2 points
+                try:
+                    results = scipy.optimize.leastsq(
+                        func=__fit_linear_regression_error,
+                        x0=p0,
+                        args=(times, reads, noise),
+                        full_output=True,
+                    )
+                    best_fit, pcov, infodict, mesg, ier = results
+                    perr = numpy.sqrt(numpy.diag(pcov))
+                except:
+                    pass
+
+            max_t = numpy.max(times)
+            n_samples = times.shape[0]
+
+            # get the pair-wise sampling of all parameters (times, reads, and noise)
+            weighted = best_fit[1]
+            _med = slope
+            _sigma = perr[1]
+            n_useful_pairs = n #perr[0]
+
+            cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
+
+        t2 = time.time()
+        logger.debug("Fitting rauscher2007 for row %d done after %.3f seconds" % (y, t2-t1))
+
+        jobqueue.task_done()
+
+    logger.debug("Shutting down")
+    shmem_results.close()
+    shmem_cube_corrected.close()
+
 def worker__fit_pairwise_slopes(
         shmem_cube_corrected, shmem_results, cube_shape, results_shape,
         jobqueue, read_times, speedy=False, workername=None,
@@ -1696,7 +1872,9 @@ class NIRWALS(object):
 
     def fit_pairwise_slopes(self):
 
-        self.logger.info("Start of fit pairwise slopes")
+    def fit_pairwise_slopes(self, algorithm='pairwise_slopes', group_cutoff=None):
+
+        self.logger.info("Start of up-the-ramp fitting (algorithm: %s)" % (algorithm))
         t1 = time.time()
         jobqueue = multiprocessing.JoinableQueue()
         for y in range(4, 2048-4):
@@ -1705,6 +1883,19 @@ class NIRWALS(object):
         # setup and start worker processes
         worker_processes = []
         n_workers = self.n_cores
+        if (algorithm == 'pairwise_slopes'):
+            worker_method = worker__fit_pairwise_slopes
+        elif (algorithm == 'rauscher2007'):
+            worker_method = worker__fit_rauscher2007
+        elif (algorithm == 'linreg'):
+            worker_method = worker__fit_linear_regression
+        else:
+            self.logger.critical("URG algorithm (%s) not implemented")
+            return False
+
+        if (group_cutoff is not None):
+            self.logger.info("Restricting data analysis to %d groups" % (group_cutoff))
+
         for n in range(n_workers):
             p = multiprocessing.Process(
                 target=worker__fit_pairwise_slopes,
