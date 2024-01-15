@@ -1568,28 +1568,28 @@ class NIRWALS(object):
         # self.noise_image = 1. / self.inv_noise
         # # print(image.shape)
 
-        self.weighted_mean = numpy.zeros((2048,2048))
-        self.noise_image = numpy.zeros((2048,2048))
-        self.median_image = numpy.zeros((2048,2048))
-        readnoise = 20
-        for y in range(2048):
-            self.logger.info("Reconstructing image,y=%d" % (y))
-            for x in range(2048):
-                raw_reads = self.linearized_cube[:,y,x]
-                result = fit_pairwise_slope(
-                    times=self.read_times,
-                    reads=raw_reads,
-                    noise=numpy.sqrt(numpy.fabs(raw_reads) + readnoise**2),
-                    good_reads=None,
-                    plot=False
-                )
-                self.weighted_mean[y,x] = result['weighted']
-                self.noise_image[y,x] = result['sigma']
-                self.median_image[y,x] = result['median']
-
-        pyfits.PrimaryHDU(data=self.weighted_mean).writeto("safety__weightedmean.fits", overwrite=True)
-        pyfits.PrimaryHDU(data=self.noise_image).writeto("safety__sigma.fits", overwrite=True)
-        pyfits.PrimaryHDU(data=self.median_image).writeto("safety__median.fits", overwrite=True)
+        # self.weighted_mean = numpy.zeros((2048,2048))
+        # self.noise_image = numpy.zeros((2048,2048))
+        # self.median_image = numpy.zeros((2048,2048))
+        # readnoise = 20
+        # for y in range(2048):
+        #     self.logger.info("Reconstructing image,y=%d" % (y))
+        #     for x in range(2048):
+        #         raw_reads = self.linearized_cube[:,y,x]
+        #         result = fit_pairwise_slope(
+        #             times=self.read_times,
+        #             reads=raw_reads,
+        #             noise=numpy.sqrt(numpy.fabs(raw_reads) + readnoise**2),
+        #             good_reads=None,
+        #             plot=False
+        #         )
+        #         self.weighted_mean[y,x] = result['weighted']
+        #         self.noise_image[y,x] = result['sigma']
+        #         self.median_image[y,x] = result['median']
+        #
+        # pyfits.PrimaryHDU(data=self.weighted_mean).writeto("safety__weightedmean.fits", overwrite=True)
+        # pyfits.PrimaryHDU(data=self.noise_image).writeto("safety__sigma.fits", overwrite=True)
+        # pyfits.PrimaryHDU(data=self.median_image).writeto("safety__median.fits", overwrite=True)
         # ratios = linearized / linearized[3:4, :, :]
 
 
