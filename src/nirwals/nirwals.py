@@ -969,6 +969,9 @@ class NIRWALS(object):
         # Keep track of what intermediate processing steps to save/dump
         self.write_dumps = dumps
 
+        self.header_first_read = None
+        self.header_last_read = None
+
         self.provenance = DataProvenance(
             logger=self.logger,
             track_machine_data=True
@@ -1136,6 +1139,7 @@ class NIRWALS(object):
         return
     def add_file(self, filename):
         return
+
     def load_all_files(self, max_number_files=None, mask_saturated_pixels=True):
 
         if (max_number_files is None):
@@ -1173,6 +1177,10 @@ class NIRWALS(object):
             except Exception as e:
                 self.logger.error("Unable to open %s (%s)" % (fn, str(e)))
                 continue
+
+            if (self.header_first_read is None):
+                self.header_first_read = hdr
+            self.header_last_read = hdr
 
             # hdulist.info()
 
@@ -1969,6 +1977,9 @@ class NIRWALS(object):
             # except Exception as e:
             #     self.logger.critical(str(e))
             #     pass
+
+        _list.append(pyfits.ImageHDU(header=self.header_first_read, name="READ_FIRST"))
+        _list.append(pyfits.ImageHDU(header=self.header_last_read, name="READ_LAST"))
 
         self.logger.debug("Adding data provenance")
         _list.append(self.provenance.write_as_hdu())
