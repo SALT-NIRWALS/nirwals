@@ -1387,7 +1387,8 @@ class NIRWALS(object):
 
         pass
 
-    def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False, group_cutoff=None):
+    def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False, group_cutoff=None,
+               algorithm='linreg'):
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
         self.logger.info("Done loading all files")
@@ -1418,7 +1419,7 @@ class NIRWALS(object):
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
 
         # self.fit_pairwise_slopes(algorithm="rauscher2007")
-        self.fit_pairwise_slopes(algorithm="linreg", group_cutoff=group_cutoff)
+        self.fit_pairwise_slopes(algorithm=algorithm, group_cutoff=group_cutoff)
         # self.fit_pairwise_slopes(algorithm="pairwise_slopes")
 
     def dump_save(self, imgtype=None):
@@ -1871,8 +1872,6 @@ class NIRWALS(object):
         self.logger.info("Non-linearity correction complete after taking %.3f seconds" % (t2-t1))
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
         return
-
-    def fit_pairwise_slopes(self):
 
     def fit_pairwise_slopes(self, algorithm='pairwise_slopes', group_cutoff=None):
 

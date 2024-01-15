@@ -73,6 +73,9 @@ if __name__ == "__main__":
                          help="speed up processing by adaptively reducing sample reads")
     cmdline.add_argument("--ncores", dest="n_cores", default=None, type=int,
                          help="number of CPU cores to use")
+    cmdline.add_argument("--algorithm", dest="algorithm", default='linreg', type=str,
+                         choices={"linreg", "rauscher2007", 'pairwise'},
+                         help="number of CPU cores to use")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -104,6 +107,7 @@ if __name__ == "__main__":
         #     logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
         #     rss.read_nonlinearity_corrections(args.nonlinearity_fn)
         rss.reduce(dark_fn=args.dark_fn,
+                   algorithm=args.algorithm,
                    )
 
         # persistency_options = args.persistency_mode.split(":")
