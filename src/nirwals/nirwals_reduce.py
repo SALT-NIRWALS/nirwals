@@ -31,8 +31,8 @@ from nirwals import NIRWALS, dump_options
 
 def main():
 
-    mplog.setup_logging(debug_filename="../debug.log",
-                        log_filename="../run_analysis.log")
+    mplog.setup_logging(debug_filename="nirwals_debug.log",
+                        log_filename="nirwals_reduce.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 

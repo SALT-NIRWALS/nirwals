@@ -124,8 +124,8 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
 
 def main():
 
-    mplog.setup_logging(debug_filename="../debug.log",
-                        log_filename="../run_analysis.log")
+    mplog.setup_logging(debug_filename="nirwals_debug.log",
+                        log_filename="nirwals_fit_nonlinearity.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
