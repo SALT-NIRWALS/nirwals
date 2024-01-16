@@ -1,0 +1,67 @@
+[metadata]
+description_file=README.md
+license_files=LICENSE.rst
+name = nirwals
+author = Ralf Kotulla
+author_email = kotulla@wisc.edu
+url = https://github.com/SALT-NIRWALS/nirwals
+description = A pipeline for instrument signature removal for the SALT/NIRWALS instrument
+
+
+[options]
+install_requires =
+    astropy
+    matplotlib
+    multiparlog
+    numpy
+    pandas
+    scipy
+    pyvo
+    watchdog
+
+package_dir =
+    nirwals = src/nirwals
+    nirwals.data = src/nirwals/data
+packages =
+    nirwals
+    nirwals.data
+
+;'nirwals': 'src/nirwals',
+;                   'nirwals.data': 'src/nirwals/data'},
+;    packages = ['nirwals',
+;                'nirwals.data'],
+
+[options.entry_points]
+console_scripts =
+    src/nirwals_reduce.py
+    src/nirwals_makedark.py
+    src/nirwals_makemasterdark.py
+    src/nirwals_fit_nonlinearity.py
+
+;    package_dir = {'nirwals': 'src/nirwals',
+;                   'nirwals.data': 'src/nirwals/data'},
+;    packages = ['nirwals',
+;                'nirwals.data'],
+;    # version = '{{VERSION_PLACEHOLDER}}',
+;    description = "A pipeline for instrument signature removal for the SALT/NIRWALS instrument",
+;    # # long_description = long_descr,
+;    author = "Ralf Kotulla",
+;    author_email = "kotulla@wisc.edu",
+;    url = "https://github.com/SALT-NIRWALS/nirwals",
+;
+;    scripts=['src/nirwals_reduce.py',
+;             'src/nirwals_makedark.py',
+;             'src/nirwals_makemasterdark.py',
+;             'src/nirwals_fit_nonlinearity.py',
+;             ],
+;
+;    install_requires=[
+;        'astropy',
+;        'matplotlib',
+;        'multiparlog',
+;        'numpy',
+;        'pandas',
+;        'scipy',
+;        'pyvo',
+;        'watchdog',
+;        ],

@@ -1,6 +1,11 @@
+[build-system]
+requires = ["pbr>=6.0.0", "setuptools>=64.0.0"]
+build-backend = "pbr.build"
+
 [project]
 name = "nirwals"
-version = "{{VERSION_PLACEHOLDER}}"
+version = "0.1.0"
+
 authors = [
   { name="Ralf Kotulla", email="ralf.kotulla@gmail.com" },
 ]
@@ -14,6 +19,28 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+dependencies = [
+    "astropy",
+    "matplotlib",
+    "multiparlog",
+    "numpy",
+    "pandas",
+    "scipy",
+    "pyvo",
+    "watchdog"
+]
+
 [project.urls]
 "Homepage" = "https://github.com/SALT-NIRWALS/nirwals"
 "Bug Tracker" = "https://github.com/SALT-NIRWALS/nirwals/issues"
+
+[project.scripts]
+nirwals_reduce = "nirwals.nirwals_reduce:main"
+nirwals_fit_nonlinearity = "nirwals.nirwals_fit_nonlinearity:main"
+
+# 'src/nirwals_reduce.py'
+##     src/nirwals_makedark.py
+##     src/nirwals_makemasterdark.py
+#    nirwals_fit_nonlinearity = 'src/nirwals_fit_nonlinearity.py'
+
+

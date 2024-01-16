@@ -29,10 +29,10 @@ print(astropy.__path__)
 
 from nirwals import NIRWALS, dump_options
 
-if __name__ == "__main__":
+def main():
 
-    mplog.setup_logging(debug_filename="debug.log",
-                        log_filename="run_analysis.log")
+    mplog.setup_logging(debug_filename="../debug.log",
+                        log_filename="../run_analysis.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
@@ -169,3 +169,8 @@ if __name__ == "__main__":
 
         del rss
         logger.info("all done!")
+
+
+
+if __name__ == "__main__":
+    main()

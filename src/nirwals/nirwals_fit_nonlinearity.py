@@ -122,10 +122,10 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
 
 
 
-if __name__ == "__main__":
+def main():
 
-    mplog.setup_logging(debug_filename="debug.log",
-                        log_filename="run_analysis.log")
+    mplog.setup_logging(debug_filename="../debug.log",
+                        log_filename="../run_analysis.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
@@ -342,3 +342,8 @@ if __name__ == "__main__":
 
     # rss.plot_pixel_curve(818,1033)
     # rss.plot_pixel_curve(1700,555)
+
+
+
+if __name__ == "__main__":
+    main()

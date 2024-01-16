@@ -54,6 +54,8 @@ if __name__ == "__main__":
                          help="combine results for all input frames")
     cmdline.add_argument("--pdf", dest="pdf", default='master_gains.pdf', type=str,
                          help="name for combined pdf output")
+    cmdline.add_argument("--algorithm", dest="algorithm", default='slopes', type=str,
+                         help="algorithm -- either slope or median")
     cmdline.add_argument("files", nargs='+', help="reduced input files")
     args = cmdline.parse_args()
 
@@ -82,7 +84,7 @@ if __name__ == "__main__":
         logger.info("Preparing for %d amplifiers" % (namps))
 
         logger.info("Stacking rows (%d ... %d)" % (args.y1, args.y2))
-        colstack = numpy.sum(data[args.y1:args.y2], axis=0)
+        colstack = numpy.nanmean(data[args.y1:args.y2], axis=0)
         numpy.savetxt(fn[:-5]+"___colstack.txt", colstack.reshape((-1,1)))
 
         # find only good data -- first & last 4 colums are reference pixels and always bad
@@ -108,6 +110,7 @@ if __name__ == "__main__":
 
         chunks = []
         amp_edges = []
+        amp_median = []
         bad_file = False
 
         for amp in range(namps):
@@ -131,11 +134,12 @@ if __name__ == "__main__":
             base_points = (numpy.arange(n_points, dtype=float) + 0.5) * point_spacing + numpy.min(amp_x)
 
             # do fit
-            lsq = scipy.interpolate.LSQUnivariateSpline(
-                x=amp_x, y=amp_val,
-                t=base_points,
-                k=3,
-                ext='extrapolate')
+            # try:
+            # lsq = scipy.interpolate.LSQUnivariateSpline(
+            #     x=amp_x, y=amp_val,
+            #     t=base_points,
+            #     k=3,
+            #     ext='extrapolate')
 
             linfit = scipy.stats.linregress(x=amp_x, y=amp_val)
 
