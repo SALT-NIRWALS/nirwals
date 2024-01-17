@@ -1398,7 +1398,6 @@ class NIRWALS(object):
         pass
 
     def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False, group_cutoff=None,
-               algorithm='linreg'):
                algorithm=None):
 
         if (algorithm is None):
