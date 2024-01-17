@@ -133,7 +133,7 @@ class DataProvenance( object ):
         hdulist.close()
 
 
-if __name__ == "__main__":
+def main():
 
     mplog.setup_logging(debug_filename="debug.log",
                         log_filename="run_analysis.log")
@@ -146,3 +146,8 @@ if __name__ == "__main__":
     prov = DataProvenance(invocation=False)
     prov.read_from_fits(fn)
     prov.report()
+
+
+if __name__ == "__main__":
+    main()
+
