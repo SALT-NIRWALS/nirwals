@@ -1101,7 +1101,7 @@ class NIRWALS(object):
             self.ref_header = self.ref_hdulist[0].header
         except:
             self.logger.critical("Unable to open input file (%s)" % (os.path.abspath(fn)))
-        self.provenance.add("ref-header", self.fn)
+        self.provenance.add("ref-header", os.path.abspath(self.fn))
 
         # image dimensions
         self.nx = self.ref_header['XSTOP'] - self.ref_header['XSTART'] + 1
