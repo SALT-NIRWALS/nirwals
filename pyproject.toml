@@ -44,4 +44,27 @@ nirwals_provenance = "nirwals.provenance:main"
 ##     src/nirwals_makemasterdark.py
 #    nirwals_fit_nonlinearity = 'src/nirwals_fit_nonlinearity.py'
 
+[tool.poetry]
+name='nirwals'
+version = "0.0.0"
+description = "basic instrument signature removal for the NIRWALS instrument on the SALT telescope"
+readme = "README.md"
+license = { file="LICENSE" }
+authors = [
+  { name="Ralf Kotulla", email="ralf.kotulla@gmail.com" },
+]
+license = { file="LICENSE" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+#style = "semver"
+style = 'pep440'
+
 
