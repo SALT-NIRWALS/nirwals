@@ -1836,7 +1836,7 @@ class NIRWALS(object):
                 self.logger.info("Reading nonlinearity corrections from %s" % (nonlin_fn))
                 hdulist = pyfits.open(nonlin_fn)
                 # hdulist.info()
-                nonlinearity_cube = hdulist[0].data
+                nonlinearity_cube = hdulist['NONLINPOLY'].data
                 self.logger.debug("CORR shape: %s" % (str(nonlinearity_cube.shape)))
             except Exception as e:
                 self.logger.error(str(e))
