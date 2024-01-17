@@ -928,6 +928,7 @@ class NIRWALS(object):
                  saturation_level=50000,
                  saturation_fraction=0.25, saturation_percentile=95,
                  use_reference_pixels='none',
+                 algorithm='linreg',
                  mask_saturated_pixels=False,
                  nonlinearity=None,
                  n_cores=0,
@@ -942,6 +943,7 @@ class NIRWALS(object):
         self.logger.info("Current working directory: %s" % (os.getcwd()))
 
         self.use_reference_pixels = use_reference_pixels
+        self.algorithm = algorithm
         self.image_stack_initialized = False
         self.first_read_subtracted = False
         self.first_read = None
@@ -1397,6 +1399,10 @@ class NIRWALS(object):
 
     def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False, group_cutoff=None,
                algorithm='linreg'):
+               algorithm=None):
+
+        if (algorithm is None):
+            self.algorithm = algorithm
 
         self.load_all_files(mask_saturated_pixels=mask_saturated_pixels)
         self.logger.info("Done loading all files")
