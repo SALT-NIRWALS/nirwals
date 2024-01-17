@@ -1432,7 +1432,7 @@ class NIRWALS(object):
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
 
         # self.fit_pairwise_slopes(algorithm="rauscher2007")
-        self.fit_pairwise_slopes(algorithm=algorithm, group_cutoff=group_cutoff)
+        self.fit_pairwise_slopes(algorithm=self.algorithm, group_cutoff=group_cutoff)
         # self.fit_pairwise_slopes(algorithm="pairwise_slopes")
 
     def dump_save(self, imgtype=None):
