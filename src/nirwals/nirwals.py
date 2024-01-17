@@ -1942,7 +1942,39 @@ class NIRWALS(object):
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
         return
 
+    def fix_final_headers(self):
+
+        # Delete headers we no longer need, since they are not applicable to the full sequence
+        self.logger.debug("Deleting unnecessary headers")
+        for key in ['READ', 'ACTEXP']:
+            try:
+                del self.ref_header[key]
+            except:
+                pass
+
+        # Add some additional headers
+        self.logger.debug("Adding more headers to primary header")
+        self.ref_header['EXPTIME'] = -1.
+        if (self.header_last_read is not None):
+            self.ref_header['EXPTIME'] = (self.header_last_read['ACTEXP'] / 1.e6)
+
+
+        # modify some existing keys to match the sequence
+        for key in ['SDST-', 'UTC-', 'TIME-']:
+            self.ref_header[key+"OBS"] = self.header_first_read[key+'OBS']
+            self.ref_header.insert(key=key+"OBS", card=(key+"END", self.header_last_read[key+'OBS']), after=True)
+
+        self.ref_header['PUPSTA'] = self.header_first_read['PUPSTA']
+        self.ref_header['PUPEND'] = self.header_last_read['PUPEND']
+
+        return
+
+
     def write_results(self, fn=None, flat4salt=False):
+
+        # Add/modify FITS headers for output
+        self.fix_final_headers()
+
         if (fn is None):
             fn = os.path.join(self.basedir, self.filebase) + ".reduced.fits"
 
