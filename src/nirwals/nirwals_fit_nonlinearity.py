@@ -16,8 +16,7 @@ import numpy
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-from nirwals import NIRWALS
-
+from nirwals import NIRWALS, DataProvenance
 
 
 def nonlinfit_worker(jobqueue, resultqueue, times,
@@ -160,6 +159,7 @@ def main():
                   use_reference_pixels=args.ref_pixel_mode,)
     logger.info("Reading files")
     rss.load_all_files()
+    rss.fix_final_headers()
 
     logger.info("Applying reference pixel corrections")
     rss.apply_reference_pixel_corrections()
@@ -243,8 +243,18 @@ def main():
             out_fn = "nonlinpoly.fits"
         else:
             out_fn = args.nonlinearity_fn
+
+        img_hdu = pyfits.ImageHDU(data=result_nonlinpoly, name="NONLINPOLY")
+        img_hdu.header['POLYORDR'] = poly_order
+        img_hdu.header['REFLEVEL'] = reflevel
+        img_hdu.header['REFPIXEL'] = args.ref_pixel_mode,
+        output_hdulist = pyfits.HDUList([
+            pyfits.PrimaryHDU(header=rss.ref_header),
+            img_hdu,
+            rss.provenance.write_as_hdu()
+        ])
         logger.info("Writing correction coefficients to output FITS (%s)" % (out_fn))
-        pyfits.PrimaryHDU(data=result_nonlinpoly).writeto(out_fn, overwrite=True)
+        output_hdulist.writeto(out_fn, overwrite=True)
 
         pyfits.PrimaryHDU(data=out_processing_time).writeto(out_fn[:-5]+"__cputime.fits", overwrite=True)
         pyfits.PrimaryHDU(data=out_refslope).writeto(out_fn[:-5]+"__refslope.fits", overwrite=True)
