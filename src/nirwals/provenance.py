@@ -11,13 +11,15 @@ import importlib.metadata
 
 class DataProvenance( object ):
 
-    def __init__(self, logger=None, track_machine_data=False):
+    def __init__(self, logger=None, track_machine_data=False, invocation=True):
 
         if (logger is None):
             logger = logging.getLogger("DataProvenance")
         self.logger = logger
 
         self.inventory = {}
+        if (invocation):
+            self.add("invocation", " ".join(sys.argv))
 
         if (track_machine_data):
 
@@ -141,6 +143,6 @@ if __name__ == "__main__":
     logger = logging.getLogger("NirwalsReduce")
 
     fn = sys.argv[1]
-    prov = DataProvenance()
+    prov = DataProvenance(invocation=False)
     prov.read_from_fits(fn)
     prov.report()
