@@ -38,7 +38,7 @@ dependencies = [
 nirwals_reduce = "nirwals.nirwals_reduce:main"
 nirwals_fit_nonlinearity = "nirwals.nirwals_fit_nonlinearity:main"
 nirwals_provenance = "nirwals.provenance:main"
-nirwals_watchdog = "nirwald.nirwals_watchdog:main"
+nirwals_watchdog = "nirwals.nirwals_watchdog:main"
 
 # 'src/nirwals_reduce.py'
 ##     src/nirwals_makedark.py
