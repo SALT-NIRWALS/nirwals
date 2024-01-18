@@ -251,10 +251,10 @@ samp_metadata = {
 }
 
 
-if __name__ == "__main__":
+def main():
 
-    mplog.setup_logging(debug_filename="debug.log",
-                        log_filename="run_analysis.log")
+    mplog.setup_logging(debug_filename="../debug.log",
+                        log_filename="../run_analysis.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
@@ -385,3 +385,6 @@ if __name__ == "__main__":
         watchdog_worker.join()
 
     logger.info("All shut down, good bye & have a great day!")
+
+if __name__ == "__main__":
+    main()
