@@ -1812,7 +1812,6 @@ class NIRWALS(object):
                 self.logger.error(str(e))
                 return False
 
-        self.provenance.add("nonlinearity", nonlin_fn)
         self.nonlin_fn = nonlin_fn
         self.nonlinearity_cube = nonlinearity_cube
 
@@ -1821,6 +1820,8 @@ class NIRWALS(object):
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
 
         self.logger.info("Starting nonlinearity correction")
+        self.provenance.add("non-linearity", os.path.abspath(self.nonlin_fn))
+
         t1 = time.time()
         jobqueue = multiprocessing.JoinableQueue()
         for y in range(2048):
