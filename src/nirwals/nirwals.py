@@ -988,9 +988,10 @@ class NIRWALS(object):
         try:
             self.logger.debug("Nonlinearity file (%s) exists, checking for NONLINPOLY extension and correct dimensions" % (self.nonlin_fn))
             hdu = pyfits.open(self.nonlin_fn)
-            data = hdu['NONLINPOLY'].data
+            nonlin_ext = hdu['NONLINPOLY']
+            data = nonlin_ext.data
             if (data is not None and data.ndim == 3 and data.shape[1]==self.ny and data.shape[2]==self.nx):
-                polyorder = hdu[0].data.shape[0] - 1
+                polyorder = data.shape[0] - 1
                 self.logger.info("Found valid non-linearity correction cube, order %d, in %s" % (polyorder, self.nonlin_fn))
                 self.nonlinearity_polyorder = polyorder
                 return True
