@@ -32,41 +32,7 @@ from .refpixel_calibrate import  reference_pixels_to_background_correction
 import nirwals.data
 
 import astropy
-print(astropy.__path__)
 
-
-# def fit_nonlinearity_sequence(pinit, args):
-#     """
-#     Mostly a wrapper around scipy.optimize.leastsq.
-#
-#     """
-#
-#     def fit_fct(p, x):
-# #         y = numpy.zeros(x.shape)
-# #         for i in range(p.shape[0]):
-# #             y += p[i] * x**(i+1)
-# #         return y
-#     def err_fct(p,x,y,err, fitrange_x, fitrange_y):
-#         yfit = fit_fct(p,x)
-#         in_fit_range = numpy.isfinite(x) & numpy.isfinite(y)
-#         if (fitrange_x is not None):
-#             in_fit_range = in_fit_range & (x >= fitrange_x[0]) & (x < fitrange_x[1])
-#         if (fitrange_y is not None):
-#             in_fit_range = in_fit_range & (y >= fitrange_y[0]) & (y < fitrange_y[1])
-#         if (err is None):
-#             return ((y-yfit))[in_fit_range]
-#         return ((y-yfit)/err)[in_fit_range]
-#
-#     # (medlevel, exptime, None, intensity_range, exptime_range) = args
-#
-#     fit = scipy.optimize.leastsq(err_fct, pinit, args=args, full_output=1)
-#
-#     pfit = fit[0]
-#
-#     uncert = numpy.sqrt(numpy.diag(fit[1]))
-#     print(pfit, uncert)
-#     return pfit, uncert
-#
 
 #
 # Helper function for signal fitting
