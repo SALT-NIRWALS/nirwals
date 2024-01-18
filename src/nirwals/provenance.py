@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import multiparlog as mplog
+import argparse
 
 import astropy.io.fits as pyfits
 import importlib.metadata
@@ -135,17 +136,22 @@ class DataProvenance( object ):
 
 def main():
 
-    mplog.setup_logging(debug_filename="debug.log",
-                        log_filename="run_analysis.log")
+    mplog.setup_logging(debug_filename="nirwals_debug.log",
+                        log_filename="nirwals_provenance.log")
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.WARNING)
 
+    cmdline = argparse.ArgumentParser()
+    cmdline.add_argument("files", nargs="+",
+                         help="list of input filenames")
+    args = cmdline.parse_args()
+
     logger = logging.getLogger("NirwalsReduce")
 
-    fn = sys.argv[1]
-    prov = DataProvenance(invocation=False)
-    prov.read_from_fits(fn)
-    prov.report()
+    for fn in args.files:
+        prov = DataProvenance(invocation=False)
+        prov.read_from_fits(fn)
+        prov.report()
 
 
 if __name__ == "__main__":
