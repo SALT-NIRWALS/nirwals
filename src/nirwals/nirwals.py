@@ -1927,8 +1927,12 @@ class NIRWALS(object):
 
         # modify some existing keys to match the sequence
         for key in ['SDST-', 'UTC-', 'TIME-']:
-            self.ref_header[key+"OBS"] = self.header_first_read[key+'OBS']
-            self.ref_header.insert(key=key+"OBS", card=(key+"END", self.header_last_read[key+'OBS']), after=True)
+            try:
+                self.ref_header[key+"OBS"] = self.header_first_read[key+'OBS']
+                self.ref_header.insert(key=key+"OBS", card=(key+"END", self.header_last_read[key+'OBS']), after=True)
+            except KeyError:
+                self.logger.warning("Unable to correct FITS header %(key)s-OBS and/or %(key)s-END" % dict(key=key))
+                continue
 
         self.ref_header['PUPSTA'] = self.header_first_read['PUPSTA']
         self.ref_header['PUPEND'] = self.header_last_read['PUPEND']
