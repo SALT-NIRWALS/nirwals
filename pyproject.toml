@@ -27,7 +27,8 @@ dependencies = [
     "pandas",
     "scipy",
     "pyvo",
-    "watchdog"
+    "watchdog",
+    "sysv_ipc"
 ]
 
 [project.urls]
