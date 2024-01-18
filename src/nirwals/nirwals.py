@@ -1226,7 +1226,7 @@ class NIRWALS(object):
         if (self.nonlinearity_valid()):
             self.logger.info("Loading nonlinearity correction factors from %s" % (self.nonlin_fn))
             hdu = pyfits.open(self.nonlin_fn)
-            nonlin = hdu[0].data
+            nonlin = hdu['NONLINPOLY'].data
             self.cube_nonlinearity[:,:,:] = nonlin[:,:,:]
 
 
