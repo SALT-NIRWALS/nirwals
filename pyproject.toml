@@ -1,6 +1,8 @@
 [build-system]
-requires = ["pbr>=6.0.0", "setuptools>=64.0.0"]
-build-backend = "pbr.build"
+requires = [
+    "setuptools>=64.0.0",
+]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "nirwals"
@@ -45,6 +47,15 @@ nirwals_watchdog = "nirwals.nirwals_watchdog:main"
 ##     src/nirwals_makedark.py
 ##     src/nirwals_makemasterdark.py
 #    nirwals_fit_nonlinearity = 'src/nirwals_fit_nonlinearity.py'
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ['src']
+
+[tool.setuptools.package-data]
+"nirwals.data" = ["*.csv"]
 
 [tool.poetry]
 name='nirwals'
