@@ -1323,6 +1323,7 @@ class NIRWALS(object):
     def apply_reference_pixel_corrections(self):
 
         n_reads = self.cube_raw.shape[0]
+        self.provenance.add('reference-pixel-mode', self.use_reference_pixels)
 
         # prepare jobs for each worker
         self.logger.info("Preparing jobs for ref pixel correction workers")
@@ -1398,6 +1399,7 @@ class NIRWALS(object):
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
 
         # self.fit_pairwise_slopes(algorithm="rauscher2007")
+        self.provenance.add("urg-algorithm", self.algorithm)
         self.fit_pairwise_slopes(algorithm=self.algorithm, group_cutoff=group_cutoff)
         # self.fit_pairwise_slopes(algorithm="pairwise_slopes")
 
@@ -1811,6 +1813,7 @@ class NIRWALS(object):
         self.provenance.add("nonlinearity", nonlin_fn)
         self.nonlin_fn = nonlin_fn
         self.nonlinearity_cube = nonlinearity_cube
+
     def apply_nonlinearity_corrections(self, img_cube=None):
 
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
