@@ -19,7 +19,7 @@ Using pip
 
 .. _install_from_github:
 Get latest version from Github
-====
+================================
 
 To download the latest version from github::
 
@@ -36,7 +36,7 @@ In addition to the nirwals package itself, this will install all the required pa
 
 
 Requirements
-***********
+***************
 
 ``nirwals`` has the following requirements:
 

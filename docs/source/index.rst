@@ -26,16 +26,11 @@ Telescope.
    usage_fit_nonlinearity
    usage_watchdog
    api
-   
+   generated/nirwals
 
 
 
-Check out the :doc:`usage` section for further information.  
 
-Check out the :doc:`usage` section for further information, including how to
-:ref:`install <installation>` the project.
-
-     
 Indices and tables
 ==================
 

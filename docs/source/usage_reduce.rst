@@ -63,7 +63,9 @@ Available options
   group. This is mostly to limit RAM usage. Default is no limit.
 
 - ``--nonlinearity=file.fits`` Apply non-linearity corrections to the
-  reference-pixel/first-read subtracted dataset. The reference file should be a file generated via the rssnir_fit_nonlinearity tool to contain the pixel-level corrections in the correct format
+  reference-pixel/first-read subtracted dataset. The reference file should be a file generated
+  via the ``nirwals_fit_nonlinearity`` (see usage_fit_nonlinearity_) to contain the pixel-level
+  corrections in the correct format
 
 - ``--output=_suffix_`` When generating the output filename, the specified suffix
   is inserted into the input filename. Example: for input file rss_test.fits the

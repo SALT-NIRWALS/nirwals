@@ -14,13 +14,13 @@ Towards this goal, this tool includes:
 - automatic display of the resulting data file in ds9, with communication
   via the SAMP protocol.
 
-Note that this tool does NOT include a stand-alone SAMP server (at least
-not yet; i.e. for the automatic ds9 functionality to work you need an active
-SAMP Hub, e.g. by running topcat).
+.. Note::
 
-.. udpate::
+    Note that this tool does NOT include a stand-alone SAMP server (at least
+    not yet; i.e. for the automatic ds9 functionality to work you need an active
+    SAMP Hub, e.g. by running topcat).
 
-    The most recent version of ds9 has a built-in SAMP Hub, so no external
+    **UPDATE:** The most recent version of ds9 has a built-in SAMP Hub, so no external
     standalone hub is required.
 
 To run, one needs to specify a directory to monitor, a staging dir, and some
@@ -37,7 +37,8 @@ A full listing of all supported options can be obtained by running ``nirwals_red
 
     ...> nirwals_watchdog --help
     usage: nirwals_watchdog [-h] [--stage STAGING_DIR] [--nonlinearity NONLINEARITY_FN]
-                            [--refpixel REF_PIXEL_MODE] [--test TEST] [--nowait] [--shmem] [--write] directory
+                            [--refpixel REF_PIXEL_MODE] [--test TEST] [--nowait] [--shmem]
+                            [--write] directory
 
     positional arguments:
       directory             name of directory to watch
