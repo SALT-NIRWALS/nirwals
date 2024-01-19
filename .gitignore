@@ -1,2 +1,4 @@
 *.log
 *.fits
+/docs/source/generated/
+/docs/build/
