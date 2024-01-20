@@ -10,11 +10,11 @@ tool.
 
 To read the information, run::
 
-    ..> nirwals_provenance some_output_reduced.fits
+    ...> nirwals_provenance some_output_reduced.fits
 
 For an example file, this call generates the following output::
 
-    > nirwals_provenance N202401170002.2.2.reduced.fits
+    ...> nirwals_provenance N202401170002.2.2.reduced.fits
     DataProvenance:
      ==== DATA PROVENANCE INVENTORY ====
               invocation: /home/rss/.pyenv/versions/nirwals/bin/nirwals_reduce \
@@ -52,7 +52,7 @@ reproducibility of all generated data products.
 
 For more details, you can also run ``nirwals_provenance --help`` to obtain the following usage information::
 
-    ....> nirwals_provenance --help
+    ...> nirwals_provenance --help
     usage: nirwals_provenance [-h] files [files ...]
 
     positional arguments:

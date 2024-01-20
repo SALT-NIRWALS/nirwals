@@ -59,42 +59,52 @@ for each parameter is presented below::
 Available options
 =================
 
-- ``maxfiles=N`` specifies the maximum number of files to open for a given up-the-ramp
+:kbd:`--maxfiles=N`
+  specifies the maximum number of files to open for a given up-the-ramp
   group. This is mostly to limit RAM usage. Default is no limit.
 
-- ``--nonlinearity=file.fits`` Apply non-linearity corrections to the
+:kbd:`--nonlinearity=file.fits`
+  Apply non-linearity corrections to the
   reference-pixel/first-read subtracted dataset. The reference file should be a file generated
   via the ``nirwals_fit_nonlinearity`` (see usage_fit_nonlinearity_) to contain the pixel-level
   corrections in the correct format
 
-- ``--output=_suffix_`` When generating the output filename, the specified suffix
+:kbd:`--output=_suffix_`
+  When generating the output filename, the specified suffix
   is inserted into the input filename. Example: for input file rss_test.fits the
   output filename would be _rss_test.suffix.fits. Default is "reduced".
 
-- ``--refpixel`` Use the reference pixel in the first & last 4 rows and columns
+:kbd:`--refpixel`
+  Use the reference pixel in the first & last 4 rows and columns
   to subtraced an instrumental pedestal level off all the input data. If not
   specified the first read is considered to contain this zero-exposure offset.
 
-- ``--algorithm`` selects the algorithm to be used to estimate the observed signal rate
+:kbd:`--algorithm`
+  selects the algorithm to be used to estimate the observed signal rate
   from the individual up-the-ramp sequences.
 
-- ``--dumps`` Mostly used for debugging. When provided the tool also writes a
+:kbd:`--dumps`
+  Mostly used for debugging. When provided the tool also writes a
   number of intermediate data products to disk that allow testing and verification.
 
-- ``--report`` adds a condensed summary of all files and tools used during the reduction
+:kbd:`--report`
+  adds a condensed summary of all files and tools used during the reduction
   (that includes both software setup, input files, and specified calibration products).
   The resulting information is also stored as FITS table in the output file and can be
   read using the ``nirwals_provenance`` tool (see below for usage).
 
-- ``--ncores=#`` allows to specify the number of parallel computing processes used during
+:kbd:`--ncores=#`
+  allows to specify the number of parallel computing processes used during
   the processing. By default all available cores are used.
 
 Additional options that are currently not fully implemented and/or operational, and/or
 only to be used for debugging:
 
-- ``--flat=flat.fits`` Specify a flatfield frame. Not implemented yet.
+:kbd:`--flat=flat.fits`
+  Specify a flatfield frame. Not implemented yet.
 
-- ``--dark=dark.fits`` Subtract a dark-current correction from the entire input
+:kbd:`--dark=dark.fits`
+  Subtract a dark-current correction from the entire input
   data cube. Use rssnir_makedark.py to generate the dark calibration frame. Currently
   not implemented since unstable dark-currents do not improve output data quality.
 
@@ -155,3 +165,5 @@ During execution, ``nirwals_reduce`` (and all other stand-alone tools) generates
   lot more detailed information as well. This includes, e.g., a short statement for each file being read, progress
   updates for nonlinearity and up-the-ramp fitting, and many more. It is verly likely too detailed for the common
   user, but includes a wealth of information to track down errors in case something went wrong during processing.
+
+
