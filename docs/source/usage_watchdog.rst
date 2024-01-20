@@ -1,4 +1,5 @@
 .. _nirwals_watchdog:
+
 **********************************************
 On-the-fly reduction using *nirwals_watchdog*
 **********************************************
@@ -29,8 +30,10 @@ Towards this goal, this tool includes:
     By default, each frame is reduced, written to disk, and then a message is sent to ds9 to update the frame and
     display the new image. This, therefore, likely requires some disk I/O, although in practice the operating system
     should cache the file, and this step not actually be slowed down by actually writing to and reading from a physical
-    disk. Alternatively, the tool can interact with ds9 by storing the frame in shared memory, and thus ds9 updates
-    without any additional delays and without any I/O overheads (see the **--shmem** option below); this may be advantageous in cases where input and
+    disk.
+
+    Alternatively, the tool can interact with ds9 by storing the frame in shared memory, and thus ds9 updates
+    without any additional delays and without any I/O overheads (see the :kbd:`--shmem` option below); this may be advantageous in cases where input and
     output files are stored on a network drive, or on a machine where file-caching is limited. Downside of this
     approach is that ds9 does not update the intensity histograms, and therefore automatic scaling (e.g. zscale) may
     not work (manually setting the intensity scaling still works fine though).
@@ -85,20 +88,24 @@ Options mirror the naming convention and functionality of ``nirwals_reduce`` whe
   ``nirwals_reduce`` for more details)
 
 :kbd:`--refpixel`
-  reference pixels mode (use _blockyslope2_ for best performance; see ``nirwals_reduce`` for
+  reference pixels mode (use **blockyslope2** for best performance; see ``nirwals_reduce`` for
   further details)
 
 :kbd:`--test`
   Run a test, simulating the arrival of new files in the monitored
-  directory. Syntax is :kbd:`--test=delay:@filelist`, with delay giving a delay time
+  directory.
+
+  Syntax is :kbd:`--test=delay:@filelist`, with delay giving a delay time
   between successive frames in seconds, and filelists specifying a file containing
-  a list of "newly arrived" files, with one file per line (lines starting twith #
+  a list of "newly arrived" files, with one file per line (lines starting with #
   are ignored)
 
 :kbd:`--nowait`
   By default, :command:`nirwals_watchdog` waits for a valid SAMP connection before starting work. If this
   is not required and/or desired, this waiting can be disabled. In that case, all on-the-fly reduction still works,
-  but updating frames in ds9 is disabled. Note also that nirwals_watchdog only checks for a valid SAMP connection
+  but updating frames in ds9 is disabled.
+
+  Note also that nirwals_watchdog only checks for a valid SAMP connection
   during startup, so loosing a SAMP connection during execution may result in an error, and starting up a SAMP
   server after the initial waiting phase will not automatically establish a connection.
 

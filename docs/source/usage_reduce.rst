@@ -157,11 +157,11 @@ Logging and more detailed progress updates
 
 During execution, ``nirwals_reduce`` (and all other stand-alone tools) generates two separate log files:
 
-- ``nirwals_reduce.log`` (or named after each respective tool) contains the same output as what is printed in the
+- :file:`nirwals_reduce.log` (or named after each respective tool) contains the same output as what is printed in the
   terminal and contains a high-level summary of the process and the selected options. It also contains warnings in
   case, for example, a selected input file was not found, or if some error occured during runtime.
 
-- ``nirwals_debug.log`` contains all output also included in ``nirwals_reduce.log``, but in addition also includes a
+- :file:`nirwals_debug.log` contains all output also included in ``nirwals_reduce.log``, but in addition also includes a
   lot more detailed information as well. This includes, e.g., a short statement for each file being read, progress
   updates for nonlinearity and up-the-ramp fitting, and many more. It is verly likely too detailed for the common
   user, but includes a wealth of information to track down errors in case something went wrong during processing.
