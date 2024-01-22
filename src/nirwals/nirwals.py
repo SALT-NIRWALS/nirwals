@@ -1916,6 +1916,10 @@ class NIRWALS(object):
 
     def fix_final_headers(self):
 
+        # Set some basic headers just to make sure
+        self.ref_header['TELESCPE'] = "SALT"
+        self.ref_header['INSTRUME'] = "NIRWALS"
+
         # Delete headers we no longer need, since they are not applicable to the full sequence
         self.logger.debug("Deleting unnecessary headers")
         for key in ['READ', 'ACTEXP']:
@@ -1926,7 +1930,7 @@ class NIRWALS(object):
 
         # Add some additional headers
         self.logger.debug("Adding more headers to primary header")
-        self.ref_header['EXPTIME'] = -1.
+        self.ref_header['EXPTIME'] = (-1., "exposure time [seconds]")
         if (self.header_last_read is not None):
             try:
                 self.ref_header['EXPTIME'] = (self.header_last_read['ACTEXP'] / 1.e6)
@@ -1935,6 +1939,8 @@ class NIRWALS(object):
 
         # modify some existing keys to match the sequence
         for key in ['SDST-', 'UTC-', 'TIME-']:
+            self.ref_header[key+"OBS"] = "unknown"
+            self.ref_header[key+"END"] = "unknown"
             try:
                 self.ref_header[key+"OBS"] = self.header_first_read[key+'OBS']
                 self.ref_header.insert(key=key+"OBS", card=(key+"END", self.header_last_read[key+'OBS']), after=True)
@@ -1942,6 +1948,8 @@ class NIRWALS(object):
                 self.logger.error("Unable to correct FITS header %(key)s-OBS and/or %(key)s-END" % dict(key=key))
                 continue
 
+        self.ref_header['PUPSTA'] = -99999.99
+        self.ref_header['PUPEND'] = -99999.99
         try:
             self.ref_header['PUPSTA'] = self.header_first_read['PUPSTA']
             self.ref_header['PUPEND'] = self.header_last_read['PUPEND']
