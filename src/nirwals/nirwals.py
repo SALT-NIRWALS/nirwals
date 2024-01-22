@@ -1928,8 +1928,10 @@ class NIRWALS(object):
         self.logger.debug("Adding more headers to primary header")
         self.ref_header['EXPTIME'] = -1.
         if (self.header_last_read is not None):
-            self.ref_header['EXPTIME'] = (self.header_last_read['ACTEXP'] / 1.e6)
-
+            try:
+                self.ref_header['EXPTIME'] = (self.header_last_read['ACTEXP'] / 1.e6)
+            except Exception as e:
+                self.logger.error("Unable to set final exposure time (%s)" % (str(e)))
 
         # modify some existing keys to match the sequence
         for key in ['SDST-', 'UTC-', 'TIME-']:
@@ -1937,12 +1939,14 @@ class NIRWALS(object):
                 self.ref_header[key+"OBS"] = self.header_first_read[key+'OBS']
                 self.ref_header.insert(key=key+"OBS", card=(key+"END", self.header_last_read[key+'OBS']), after=True)
             except KeyError:
-                self.logger.warning("Unable to correct FITS header %(key)s-OBS and/or %(key)s-END" % dict(key=key))
+                self.logger.error("Unable to correct FITS header %(key)s-OBS and/or %(key)s-END" % dict(key=key))
                 continue
 
-        self.ref_header['PUPSTA'] = self.header_first_read['PUPSTA']
-        self.ref_header['PUPEND'] = self.header_last_read['PUPEND']
-
+        try:
+            self.ref_header['PUPSTA'] = self.header_first_read['PUPSTA']
+            self.ref_header['PUPEND'] = self.header_last_read['PUPEND']
+        except Exception as e:
+            self.logger.error("Error while writing PUPIL start/end headers (%s)" % (str(e)))
         return
 
 
