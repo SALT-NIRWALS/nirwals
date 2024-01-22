@@ -101,6 +101,7 @@ def main():
                       )
         except:
             logger.critical("Unable to start processing, read and resolve error message before continuing")
+            mplog.report_exception(e, logger)
             continue
 
         # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
@@ -112,6 +113,7 @@ def main():
                        )
         except Exception as e:
             logger.critical("Uncaught exception during reduction: %s" % (str(e)))
+            mplog.report_exception(e, logger)
             # mplog.log_exception()
 
         # persistency_options = args.persistency_mode.split(":")
@@ -166,7 +168,7 @@ def main():
             rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
         except Exception as e:
             logger.critical("Uncaught exception while writing output file: %s" % (str(e)))
-
+            mplog.report_exception(e, logger)
         if (args.report_provenance):
             rss.provenance.report()
 
