@@ -99,7 +99,7 @@ def main():
                       n_cores=args.n_cores,
                       dumps=dumpfiles,
                       )
-        except:
+        except Exception as e:
             logger.critical("Unable to start processing, read and resolve error message before continuing")
             mplog.report_exception(e, logger)
             continue
