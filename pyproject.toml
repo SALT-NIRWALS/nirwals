@@ -24,7 +24,7 @@ classifiers = [
 dependencies = [
     "astropy",
     "matplotlib",
-    "multiparlog",
+    "multiparlog==1.0.8",
     "numpy",
     "pandas",
     "scipy",
