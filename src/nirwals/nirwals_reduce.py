@@ -106,9 +106,13 @@ def main():
         # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
         #     logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
         #     rss.read_nonlinearity_corrections(args.nonlinearity_fn)
-        rss.reduce(dark_fn=args.dark_fn,
-                   algorithm=args.algorithm,
-                   )
+        try:
+            rss.reduce(dark_fn=args.dark_fn,
+                       algorithm=args.algorithm,
+                       )
+        except Exception as e:
+            logger.critical("Uncaught exception during reduction: %s" % (str(e)))
+            # mplog.log_exception()
 
         # persistency_options = args.persistency_mode.split(":")
         # persistency_mode = persistency_options[0].lower()
@@ -158,7 +162,10 @@ def main():
 
         red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
         logger.info("Writing reduction results to %s" % (os.path.abspath(red_fn)))
-        rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
+        try:
+            rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
+        except Exception as e:
+            logger.critical("Uncaught exception while writing output file: %s" % (str(e)))
 
         if (args.report_provenance):
             rss.provenance.report()
