@@ -45,7 +45,8 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
 
 class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
-    def __init__(self, incoming_queue, staging_dir, nonlinearity_file, refpixelmode, samp_cli=None, shmem_ds9=None, force_write=False):
+    def __init__(self, incoming_queue, staging_dir, nonlinearity_file, refpixelmode, samp_cli=None, shmem_ds9=None,
+                 force_write=False, every=None):
         super(NirwalsOnTheFlyReduction, self).__init__()
 
         self.logger = logging.getLogger("WatchdogProcess")
@@ -59,6 +60,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         self.latest_result = None
         self.saturated = None
         self.force_write = force_write
+        self.every = every
 
         self.staging_dir = staging_dir
         self.incoming_queue = incoming_queue
@@ -210,6 +212,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
     def run(self):
 
+        every_counter = 0
         while (True):
             t1 = time.time()
             try:
@@ -229,6 +232,8 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
                 self.incoming_queue.task_done()
                 break
 
+            every_counter += 1
+
             start_time = time.time()
             new_filename = job
             _, fn = os.path.split(new_filename)
@@ -236,15 +241,23 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             # print(seq_base)
             # print(type(new_filename))
             if (seq_base == self.current_base):
-                out_fn = self.next_read(new_filename)
+                # only reduce every N-th frame (or every frame if disabled)
+                if (self.every is None or (every_counter % self.every) == 0):
+                    out_fn = self.next_read(new_filename)
+                else:
+                    self.logger.info("Ignoring new frame (%s), currently on frame %d of %d" % (
+                        fn, (every_counter%self.every), self.every))
+                    out_fn = None
             else:
                 self.start_new_sequence(new_filename)
                 out_fn = "NEW SEQ"
+                every_counter = 0
             end_time = time.time()
 
             self.incoming_queue.task_done()
-            self.logger.info("On-the-fly processing of %s --> %s completed after %.3f seconds" % (
-                new_filename, out_fn, end_time-start_time))
+            if (out_fn is not None):
+                self.logger.info("On-the-fly processing of %s --> %s completed after %.3f seconds" % (
+                    new_filename, out_fn, end_time-start_time))
 
 
 samp_metadata = {
@@ -284,6 +297,8 @@ def main():
                          help="use shared memory to display files in ds9")
     cmdline.add_argument("--write", dest="write_reduced", default=False, action='store_true',
                          help="write reduced frames (even if not needed)")
+    cmdline.add_argument("--every", dest="every", default=None, type=int,
+                         help="only process every N-th frame instead of all frames")
     cmdline.add_argument("directory", nargs=1, help="name of directory to watch")
     args = cmdline.parse_args()
 
@@ -360,6 +375,7 @@ def main():
         samp_cli=samp_cli,
         shmem_ds9=shmem_ds9,
         force_write=args.write_reduced,
+        every=args.every,
     )
     watchdog_worker.daemon = True
     watchdog_worker.start()
