@@ -49,6 +49,8 @@ def main():
                          help="calibration dark")
     cmdline.add_argument("--output", dest="output_postfix", type=str, default="reduced",
                          help="addition to output filename")
+    cmdline.add_argument("--outputdir", dest="output_directory", type=str, default=".",
+                         help="directory for output files")
 
     cmdline.add_argument("--persistency", dest="persistency_mode", type=str, default="quick",
                          help="persistency mode")
@@ -163,9 +165,10 @@ def main():
         #     out_tmp.writeto(fit_fn, overwrite=True)
 
         red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
-        logger.info("Writing reduction results to %s" % (os.path.abspath(red_fn)))
+        red_full_fn = os.path.join(args.output_dir, red_fn)
+        logger.info("Writing reduction results to %s" % (os.path.abspath(red_full_fn)))
         try:
-            rss.write_results(fn=red_fn, flat4salt=args.write_flat_for_salt)
+            rss.write_results(fn=red_full_fn, flat4salt=args.write_flat_for_salt)
         except Exception as e:
             logger.critical("Uncaught exception while writing output file: %s" % (str(e)))
             mplog.report_exception(e, logger)
@@ -176,7 +179,11 @@ def main():
         # rss.plot_pixel_curve(1700,555)
         # rss.plot_pixel_curve(505,1660)
 
-        del rss
+        try:
+            del rss
+        except Exception as e:
+            # this is just here to catch any problems freeing up the shared memory
+            pass
         logger.info("all done!")
 
 
