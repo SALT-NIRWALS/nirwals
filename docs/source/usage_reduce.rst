@@ -77,7 +77,7 @@ Available options
   is inserted into the input filename. Example: for input file rss_test.fits the
   output filename would be _rss_test.suffix.fits. Default is "reduced".
 
-:kdb:`--outputdir=/some/directory/`
+:kbd:`--outputdir=/some/directory/`
   Specify the directory where output files are to be written to. Defaults to the local directory
   if not specified otherwise.
 
