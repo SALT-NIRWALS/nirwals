@@ -4,6 +4,7 @@
 import logging
 import multiprocessing
 import os
+import sys
 import argparse
 import astropy.io.fits as pyfits
 import astropy.samp.errors
@@ -132,6 +133,11 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         _, fn = os.path.split(filename)
 
         hdulist = pyfits.open(filename)
+        if ('WATCHRED' in hdulist[0].header):
+            if (hdulist[0].header['WATCHRED'] == 'yes'):
+                self.logger.warning("Found watchdog output file among the input files. Check configuration!!!!")
+                return None
+
         data = hdulist[0].data.astype(float)
         saturated = (data > 62000)
         if (self.saturated is None):
@@ -167,6 +173,9 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             self.latest_result[~self.saturated] = data[~self.saturated]
 
         hdulist[0].data = self.latest_result
+
+        # Put our special mark on this frame to ensure we don't accidentally process the output of this file again
+        hdulist[0].header['WATCHRED'] = ("yes", "file was processed using the nirwals watchdog")
 
         out_fn = None
         if (self.shmem_ds9 is None or self.force_write):
@@ -278,7 +287,17 @@ def main():
     cmdline.add_argument("directory", nargs=1, help="name of directory to watch")
     args = cmdline.parse_args()
 
-    path2watch = args.directory[0]
+    path2watch = os.path.abspath(args.directory[0])
+
+    stage_dir = os.path.abspath(args.staging_dir)
+    if (os.path.samefile(path2watch, stage_dir)):
+        logger.error("Watch-directory and staging directory are identical, this should not happen")
+        logger.error("Please adjust watch directory and/or staging directory [via the --stage option]")
+        sys.exit(0)
+    if (not os.path.isdir(stage_dir)):
+        logger.error("Staging directory (%s) does not exist, please create it first and re-run" % (stage_dir))
+        sys.exit(0)
+
     # print(path2watch)
 
     logger.info("Connecting to ds9 via SAMP protocol")
@@ -332,7 +351,7 @@ def main():
     logger.info("Starting on-the-fly reduction process")
     job_queue = multiprocessing.JoinableQueue()
     watchdog_worker = NirwalsOnTheFlyReduction(
-        job_queue, staging_dir=args.staging_dir,
+        job_queue, staging_dir=stage_dir,
         nonlinearity_file=args.nonlinearity_fn,
         refpixelmode=args.ref_pixel_mode,
         samp_cli=samp_cli,
