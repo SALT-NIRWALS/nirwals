@@ -290,12 +290,15 @@ def main():
     path2watch = os.path.abspath(args.directory[0])
 
     stage_dir = os.path.abspath(args.staging_dir)
-    if (os.path.samefile(path2watch, stage_dir)):
-        logger.error("Watch-directory and staging directory are identical, this should not happen")
-        logger.error("Please adjust watch directory and/or staging directory [via the --stage option]")
+    if (not os.path.isdir(path2watch)):
+        logger.error("Directory to watch (%s) not found, please check & rerun" % (path2watch))
         sys.exit(0)
     if (not os.path.isdir(stage_dir)):
         logger.error("Staging directory (%s) does not exist, please create it first and re-run" % (stage_dir))
+        sys.exit(0)
+    if (os.path.samefile(path2watch, stage_dir)):
+        logger.error("Watch-directory and staging directory are identical, this should not happen")
+        logger.error("Please adjust watch directory and/or staging directory [via the --stage option]")
         sys.exit(0)
 
     # print(path2watch)
