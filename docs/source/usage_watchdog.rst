@@ -82,7 +82,12 @@ Options mirror the naming convention and functionality of ``nirwals_reduce`` whe
 
 :kbd:`--stage`
   staging directory. This is where reduced files are written to before being sent to ds9 for
-  displaying.
+  displaying. Default is the current directory.
+
+  **Note** The watchdog has a built-in mechanism that prevents execution if the staging directory is identical
+  to the "watched" directory, as this would cause some unwanted recursion (new frame arrives, is processed, gets
+  written to disk, and the newly processed frame is detected as new frame, leading to an infinite loop of
+  processing a single frame over and over again).
 
 :kbd:`--nonlinearity`
   specify the non-linearity correction parameter file (see documentation for
