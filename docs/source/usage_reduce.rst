@@ -20,6 +20,7 @@ for each parameter is presented below::
     usage: nirwals_reduce [-h] [--maxfiles MAX_NUMBER_FILES]
                           [--nonlinearity NONLINEARITY_FN] [--flat FLATFIELD_FN]
                           [--dark DARK_FN] [--output OUTPUT_POSTFIX]
+                          [--outputdir OUTPUT_DIRECTORY]
                           [--persistency PERSISTENCY_MODE] [--saturation SATURATION]
                           [--dumps WRITE_DUMPS] [--debugpngs]
                           [--refpixel REF_PIXEL_MODE] [--flat4salt] [--report]
@@ -40,6 +41,8 @@ for each parameter is presented below::
       --dark DARK_FN        calibration dark
       --output OUTPUT_POSTFIX
                             addition to output filename
+      --outputdir OUTPUT_DIRECTORY
+                            directory for output files
       --persistency PERSISTENCY_MODE
                             persistency mode
       --saturation SATURATION
@@ -73,6 +76,10 @@ Available options
   When generating the output filename, the specified suffix
   is inserted into the input filename. Example: for input file rss_test.fits the
   output filename would be _rss_test.suffix.fits. Default is "reduced".
+
+:kdb:`--outputdir=/some/directory/`
+  Specify the directory where output files are to be written to. Defaults to the local directory
+  if not specified otherwise.
 
 :kbd:`--refpixel`
   Use the reference pixel in the first & last 4 rows and columns
