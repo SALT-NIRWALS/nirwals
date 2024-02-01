@@ -435,7 +435,7 @@ def main():
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.debug("Starting shutdown proceduce")
+        logger.debug("Starting shutdown procedure")
         pass
     finally:
         # Shut down the directory watchdog
