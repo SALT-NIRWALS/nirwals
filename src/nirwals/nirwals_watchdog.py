@@ -36,10 +36,29 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
         super(NirwalsQuicklook, self).__init__()
 
     def on_closed(self, event):
-        print("Watchdog received closed event - % s." % event.src_path)
         # Event is created, you can process it now
+        self.logger.debug("Watchdog received closed event - % s." % event.src_path)
 
-        # Hand on work to parallel worker
+        # make sure the new file is actually a FITS file
+        if (not event.src_path.lower().endswith(".fits")):
+            self.logger.info("File (%s) is not a FITS file, ignoring it" % (event.src_path))
+            return
+        # but not a RESET file
+        if (event.src_path.upper().find("RESET") >= 0):
+            self.logger.info("File (%s) is a RESET frame, we don't want those" % (event.src_path))
+            return
+        # and even if it smells like a FITS file, it should be in the form of *.#.fits
+        dir,fn = os.path.split(event.src_path)
+        items = fn.split(".")
+        if (len(items) != 5):
+            self.logger.info("File (%s) doesn't look like a FITS we are looking for (not in the form of *.#.#.#.fits)" % (event.src_path))
+            return
+        if (not items[-2].isnumeric()):
+            self.logger.info("File (%s) doesn't look like a FITS we are looking for" % (event.src_path))
+            return
+
+        # We past all preliminary checks, so hand on the rest of the work to parallel worker
+        self.logger.debug("File (%s) looks like a valid FITS, let's try to process it" % (event.src_path))
         self.handler_queue.put(event.src_path)
 
 
