@@ -406,8 +406,11 @@ def main():
                     testfiles.append(fn)
         logger.info("Test-mode activated, feeding %d files with delays of %.2f seconds" % (len(testfiles), testdelay))
         for fn in testfiles:
+            # wait the specified delay/sleep time
             time.sleep(testdelay)
-            job_queue.put(fn)
+            # simulate the arrival of a new file
+            event = watchdog.events.FileSystemEvent(fn)
+            event_handler.on_closed(event)
 
     try:
         while True:
