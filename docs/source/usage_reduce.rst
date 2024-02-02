@@ -97,9 +97,13 @@ Available options
   these dump files will be rather large.
 
   Options are:
+
   * **raw** Raw reads as written by instrument, no corrections applied.
+
   * **refpixcorr** Reads after subtracting the selected reference pixel correction.
+
   * **linearized** Data with reference pixel and nonlinearity correction applied
+
   * **all** All of the above
 
 :kbd:`--report`
