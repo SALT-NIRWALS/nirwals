@@ -103,8 +103,8 @@ def refpixel_yslope(data, edge=1, debug=False):
     full_iy,_ = numpy.indices(data.shape, dtype=float)
     full_2d_correction = full_iy * slopes + mean_top
 
-    print("top", full_iy[:5,0])
-    print("bottom", full_iy[-5:, 0])
+    # print("top", full_iy[:5,0])
+    # print("bottom", full_iy[-5:, 0])
 
     if (debug):
         pyfits.PrimaryHDU(data=full_2d_correction).writeto("refpixel__yslope.fits", overwrite=True)
@@ -187,7 +187,7 @@ def reference_pixels_to_background_correction(data, edge=1, verbose=False, make_
         full_2d_correction = refpixel_plain(data, edge, debug)
 
     elif (mode == 'blockyslope'):
-        print("Use blockyslope mode")
+        # print("Use blockyslope mode")
         full_2d_correction = refpixel_blockyslope(data, edge, debug)
 
     elif (mode == 'yslope'):
