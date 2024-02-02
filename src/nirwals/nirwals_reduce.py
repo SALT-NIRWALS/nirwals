@@ -165,7 +165,7 @@ def main():
         #     out_tmp.writeto(fit_fn, overwrite=True)
 
         red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
-        red_full_fn = os.path.join(args.output_dir, red_fn)
+        red_full_fn = os.path.join(args.output_directory, red_fn)
         logger.info("Writing reduction results to %s" % (os.path.abspath(red_full_fn)))
         try:
             rss.write_results(fn=red_full_fn, flat4salt=args.write_flat_for_salt)
