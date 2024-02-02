@@ -25,6 +25,7 @@ Telescope.
    usage_provenance
    usage_fit_nonlinearity
    usage_watchdog
+   data_products
    api
    generated/nirwals
 
