@@ -92,7 +92,15 @@ Available options
 
 :kbd:`--dumps`
   Mostly used for debugging. When provided the tool also writes a
-  number of intermediate data products to disk that allow testing and verification.
+  number of intermediate data products to disk that allow testing and verification. Output is a
+  single-extension datacube, containing one read for layer. Note that depending on the number of reads
+  these dump files will be rather large.
+
+  Options are:
+  * **raw** Raw reads as written by instrument, no corrections applied.
+  * **refpixcorr** Reads after subtracting the selected reference pixel correction.
+  * **linearized** Data with reference pixel and nonlinearity correction applied
+  * **all** All of the above
 
 :kbd:`--report`
   adds a condensed summary of all files and tools used during the reduction
