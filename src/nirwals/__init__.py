@@ -5,3 +5,4 @@ from .previous_file_picker import  PreviousFilePicker
 from .refpixel_calibrate import reference_pixels_to_background_correction
 
 from .nirwals_watchdog import NirwalsOnTheFlyReduction
+from .nirwals_fit_nonlinearity import fit_pixel_nonlinearity

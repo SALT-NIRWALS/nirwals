@@ -19,9 +19,74 @@ from matplotlib.backends.backend_pdf import PdfPages
 from nirwals import NIRWALS, DataProvenance
 
 
+
+def fit_pixel_nonlinearity(
+        reads_refpixelcorr, reads_raw, times,
+        poly_order=3, ref_level=10000, saturation_level=55000,
+        logger=None,
+    ):
+
+    if (logger is None):
+        logger = logging.getLogger("FitPixelNonlinearity")
+
+    # subtract off any residual offsets (read for t=0 should be 0)
+    reads_offset = numpy.nanmin(reads_refpixelcorr)
+    reads_refpixelcorr -= reads_offset
+
+    try:
+        # first, get an idealized target slope for the actual intensity
+        f_masked = reads_refpixelcorr.copy()
+        if (numpy.nanmax(reads_refpixelcorr) > ref_level):
+            # print(times[reads_refpixelcorr > ref_level])
+            t_exp_reflevel = numpy.nanmin(times[reads_refpixelcorr > ref_level])
+            f_masked[(f_masked < ref_level) | ~numpy.isfinite(f_masked)] = 1e9
+            n_read_reflevel = numpy.argmin(f_masked)  # t_reads[darksub_diffuse > 10000])
+        else:
+            t_exp_reflevel = numpy.nanmax(times)
+            n_read_reflevel = numpy.max(numpy.arange(reads_refpixelcorr.shape[0])[numpy.isfinite(reads_refpixelcorr)])
+
+        slope_reflevel = reads_refpixelcorr[n_read_reflevel] / times[n_read_reflevel]
+        logger.debug("time to %d counts @ read %d w/o dark (slope: %.1f)", t_exp_reflevel, n_read_reflevel,
+                     t_exp_reflevel)
+
+        # identify suitable pixels, and fit with polynomial of specified degree
+        good4fit = reads_raw < saturation_level
+        if (numpy.sum(good4fit) > 50):
+            # only if we have enough data skip the first few reads -- these
+            # might be a affected by a reset anomaly and thus are less trustworthy
+            good4fit[times < 7.] = False
+
+        nonlin_bestfit = [1.00, 0.00]
+        for iteration in range(4):
+            # apply corrections from prior iteration
+            reads_refpixelcorr += nonlin_bestfit[-1]
+            slope_reflevel /= nonlin_bestfit[-2]
+
+            nonlin_results = numpy.polyfit(
+                x=reads_refpixelcorr[good4fit],
+                y=(times * slope_reflevel)[good4fit],
+                deg=poly_order,
+                full=True
+            )
+            nonlin_bestfit = nonlin_results[0]
+
+        # now convert all poly coefficients such that the linear term is x1.00
+        p1 = nonlin_bestfit[-2]
+        for p in range(poly_order):
+            nonlin_bestfit[-(p + 2)] /= numpy.power(p1, p + 1)
+        # print('corrected:', nonlin_bestfit)
+
+    except Exception as e:  # numpy.linalg.LinAlgError as e:
+        logger.warning("Unable to fit non-linearity for x=%d  y=%d (%s)" % (x, y, str(e)))
+        nonlin_bestfit = numpy.full((poly_order + 1), fill_value=numpy.NaN)
+
+    return nonlin_bestfit, slope_reflevel
+
+
+
 def nonlinfit_worker(jobqueue, resultqueue, times,
                      shmem_cube_raw, shmem_cube_refpixelcorr, shmem_cube_nonlinpoly, cube_shape,
-                     poly_order=3, ref_level=10000, saturation_level=55000, workername="NonLinFitWorker"):
+                     poly_order=3, ref_level=10000, saturation_level=55000,  workername="NonLinFitWorker"):
 
     logger = logging.getLogger(workername)
     logger.debug("Starting worker %s" % (workername))
@@ -57,54 +122,17 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
         reads_refpixelcorr = cube_refpixelcorr[:,y,x]
         reads_raw = cube_raw[:,y,x]
 
-        # subtract off any residual offsets (read for t=0 should be 0)
-        reads_offset = numpy.nanmin(reads_refpixelcorr)
-        reads_refpixelcorr -= reads_offset
-
-        try:
-            # first, get an idealized target slope for the actual intensity
-            f_masked = reads_refpixelcorr.copy()
-            if (numpy.nanmax(reads_refpixelcorr) > ref_level):
-                # print(times[reads_refpixelcorr > ref_level])
-                t_exp_reflevel = numpy.nanmin(times[reads_refpixelcorr > ref_level])
-                f_masked[(f_masked < ref_level) | ~numpy.isfinite(f_masked)] = 1e9
-                n_read_reflevel = numpy.argmin(f_masked)  # t_reads[darksub_diffuse > 10000])
-            else:
-                t_exp_reflevel = numpy.nanmax(times)
-                n_read_reflevel = numpy.max(numpy.arange(reads_refpixelcorr.shape[0])[numpy.isfinite(reads_refpixelcorr)])
-
-            slope_reflevel = reads_refpixelcorr[n_read_reflevel] / times[n_read_reflevel]
-            logger.debug("time to %d counts @ read %d w/o dark (slope: %.1f)", t_exp_reflevel, n_read_reflevel,
-                  t_exp_reflevel)
-
-            # identify suitable pixels, and fit with polynomial of specified degree
-            good4fit = reads_raw < saturation_level
-            if (numpy.sum(good4fit) > 50):
-                # only if we have enough data skip the first few reads -- these
-                # might be a affected by a reset anomaly and thus are less trustworthy
-                good4fit[times < 7.] = False
-
-
-            nonlin_bestfit = [1.00, 0.00]
-            for iteration in range(4):
-                # apply corrections from prior iteration
-                reads_refpixelcorr += nonlin_bestfit[-1]
-                slope_reflevel /= nonlin_bestfit[-2]
-
-                nonlin_results = numpy.polyfit(reads_refpixelcorr[good4fit], (times*slope_reflevel)[good4fit],
-                                               deg=poly_order, full=True)
-                nonlin_bestfit = nonlin_results[0]
-
-            # now convert all poly coefficients such that the linear term is x1.00
-            p1 = nonlin_bestfit[-2]
-            for p in range(poly_order):
-                nonlin_bestfit[-(p+2)] /= numpy.power(p1, p+1)
-            # print('corrected:', nonlin_bestfit)
-
-        except Exception as e: # numpy.linalg.LinAlgError as e:
-            logger.warning("Unable to fit non-linearity for x=%d  y=%d (%s)" % (x,y, str(e)))
-            nonlin_bestfit = numpy.full((poly_order+1), fill_value=numpy.NaN)
-
+        nonlin_bestfit, slope_reflevel = (
+            fit_pixel_nonlinearity(
+                reads_refpixelcorr=reads_refpixelcorr,
+                reads_raw=reads_raw,
+                times=times,
+                poly_order=poly_order,
+                ref_level=ref_level,
+                saturation_level=saturation_level,
+                logger=logger,
+            )
+        )
 
         t2 = time.time()
 
