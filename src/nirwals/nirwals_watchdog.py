@@ -91,7 +91,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         self.nonlinearity_fn = nonlinearity_file
         if (nonlinearity_file is not None and os.path.isfile(nonlinearity_file)):
             hdulist = pyfits.open(nonlinearity_file)
-            self.nonlin_poly = hdulist[0].data
+            self.nonlin_poly = hdulist['NONLINPOLY'].data
             self.nonlin_poly_order = self.nonlin_poly.shape[0] - 1
             self.logger.debug("Read non-linearity corrections from %s (order: %d)" % (
                 nonlinearity_file, self.nonlin_poly_order
