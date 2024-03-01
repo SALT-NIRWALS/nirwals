@@ -246,7 +246,7 @@ def main():
                          help="saturation value/file")
     cmdline.add_argument("--reflevel", dest="reflevel", default=10000, type=float,
                          help="saturation value/file")
-    cmdline.add_argument("--ncores", dest="n_cores", default=multiprocessing.cpu_count(),
+    cmdline.add_argument("--ncores", dest="n_cores", type=int, default=multiprocessing.cpu_count(),
                          help="number of CPU cores to use for parallel fitting")
     cmdline.add_argument("--refpixel", dest="ref_pixel_mode", default='blockyslope2',
                          help="reference pixels mode [default: NO]")
