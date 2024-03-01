@@ -19,11 +19,18 @@ from matplotlib.backends.backend_pdf import PdfPages
 from nirwals import NIRWALS, DataProvenance
 
 
+NONLIN_FLAG_OK = 0x00
+NONLIN_FLAG_INSUFFICIENT_DATA = 0x01
+NONLIN_FLAG_NEGATIVE = 0x02
+NONLIN_FLAG_BADSLOPE = 0x04
+NONLIN_FLAG_NEGATIVE_REFSLOPE = 0x08
+NONLIN_FLAG_FITERROR = 0x10
 
 def fit_pixel_nonlinearity(
         reads_refpixelcorr, reads_raw, times,
-        poly_order=3, ref_level=10000, saturation_level=55000,
-        logger=None,
+        poly_order=3, ref_level=10000, saturation_level=55000, min_flux=200,
+        logger=None, n_iterations=4, normalize_linear_term=True, pixel_id=None,
+        return_full=False,
     ):
 
     if (logger is None):
@@ -32,6 +39,19 @@ def fit_pixel_nonlinearity(
     # subtract off any residual offsets (read for t=0 should be 0)
     reads_offset = numpy.nanmin(reads_refpixelcorr)
     reads_refpixelcorr -= reads_offset
+    flags = 0
+
+    # define fallback solution with no correction (i.e. corrected = 1.0 x input + 0)
+    fallback_solution = numpy.zeros((poly_order+1))
+    fallback_solution[-2] = 1.
+
+    # set some defaults in case things go bad
+    slope_reflevel = numpy.NaN
+    nonlin_bestfit = fallback_solution
+    good4fit = None
+    t_exp_reflevel = -1
+    fit_iterations = -1
+
 
     try:
         # first, get an idealized target slope for the actual intensity
@@ -46,18 +66,29 @@ def fit_pixel_nonlinearity(
             n_read_reflevel = numpy.max(numpy.arange(reads_refpixelcorr.shape[0])[numpy.isfinite(reads_refpixelcorr)])
 
         slope_reflevel = reads_refpixelcorr[n_read_reflevel] / times[n_read_reflevel]
-        logger.debug("time to %d counts @ read %d w/o dark (slope: %.1f)", t_exp_reflevel, n_read_reflevel,
-                     t_exp_reflevel)
+        logger.debug("time to %d counts @ read %d w/o dark (slope: %.1f)" % (
+            t_exp_reflevel, n_read_reflevel, t_exp_reflevel))
 
         # identify suitable pixels, and fit with polynomial of specified degree
-        good4fit = reads_raw < saturation_level
-        if (numpy.sum(good4fit) > 50):
+        good4fit = (reads_raw < saturation_level) & (reads_refpixelcorr > min_flux)
+        n_good4fit = numpy.sum(good4fit)
+        if (n_good4fit < 10):
+            flags |= NONLIN_FLAG_INSUFFICIENT_DATA
+            raise ValueError("Insufficient data to fit (only %d samples)" % (n_good4fit))
+        elif (n_good4fit > 50):
             # only if we have enough data skip the first few reads -- these
-            # might be a affected by a reset anomaly and thus are less trustworthy
+            # might be affected by a reset anomaly and thus are less trustworthy
             good4fit[times < 7.] = False
 
+
         nonlin_bestfit = [1.00, 0.00]
-        for iteration in range(4):
+        fit_iterations=[]
+        for iteration in range(n_iterations):
+
+            if (nonlin_bestfit[-2] < 0):
+                flags |= NONLIN_FLAG_NEGATIVE_REFSLOPE
+                raise ValueError("Something is seriously amiss, reference slope is negative")
+
             # apply corrections from prior iteration
             reads_refpixelcorr += nonlin_bestfit[-1]
             slope_reflevel /= nonlin_bestfit[-2]
@@ -69,23 +100,63 @@ def fit_pixel_nonlinearity(
                 full=True
             )
             nonlin_bestfit = nonlin_results[0]
+            fit_iterations.append(nonlin_bestfit)
+
+        # check if ANY of the correction values turn negative
+        inp = numpy.arange(min_flux, numpy.nanmax(reads_refpixelcorr)) #50000)
+        out = numpy.polyval(nonlin_bestfit, inp)
+        if ((out < nonlin_bestfit[-1]).any()):
+            # numpy.savetxt("nonlin_negatives_%s.txt" % pixel_id.replace(" ",""), numpy.array([inp, out]).T)
+            flags |= NONLIN_FLAG_NEGATIVE
+            raise ValueError("Illegal solution, corrected value < 0")
+
+        # also check if first derivative is always positive (i.e. corrected counts monotoneously increase with increasing observed counts)
+        bestfit_der1 = numpy.polyder(nonlin_bestfit, m=1)
+        slopes = numpy.polyval(bestfit_der1, inp)
+        if ((slopes <= 0).any()):
+            # numpy.savetxt("nonlin_badslope_%s.txt" % pixel_id.replace(" ",""), numpy.array([inp, out, slopes]).T)
+            # numpy.savetxt("nonlin_badslope_%s.raw" % pixel_id.replace(" ",""), numpy.array([
+            #     times, reads_raw, reads_refpixelcorr, numpy.polyval(nonlin_bestfit, reads_refpixelcorr)]).T)
+            flags |= NONLIN_FLAG_BADSLOPE
+            raise ValueError("Illegal solution, negative slope detected")
+
+        # print("slope at signal 0:", numpy.polyval(bestfit_der1, 0))
+        # print("mean slope 0-1K", numpy.mean(numpy.polyval(bestfit_der1, numpy.linspace(0, 1000, 100))))
 
         # now convert all poly coefficients such that the linear term is x1.00
-        p1 = nonlin_bestfit[-2]
-        for p in range(poly_order):
-            nonlin_bestfit[-(p + 2)] /= numpy.power(p1, p + 1)
-        # print('corrected:', nonlin_bestfit)
+        if (normalize_linear_term):
+            p1 = nonlin_bestfit[-2]
+            for p in range(poly_order):
+                nonlin_bestfit[-(p + 2)] /= numpy.power(p1, p + 1)
+            # print('corrected:', nonlin_bestfit)
+
+    except ValueError as e:
+        logger.warning("Unable to fit non-linearity for %s (%s)" % (pixel_id, str(e)))
 
     except Exception as e:  # numpy.linalg.LinAlgError as e:
-        logger.warning("Unable to fit non-linearity for x=%d  y=%d (%s)" % (x, y, str(e)))
-        nonlin_bestfit = numpy.full((poly_order + 1), fill_value=numpy.NaN)
+        flags |= NONLIN_FLAG_FITERROR
+        logger.warning("Unable to fit non-linearity for %s (%s)" % (pixel_id, str(e)))
 
-    return nonlin_bestfit, slope_reflevel
 
+    if (flags != NONLIN_FLAG_OK):
+        nonlin_bestfit = fallback_solution
+
+    if (not return_full):
+        return nonlin_bestfit, slope_reflevel, flags
+
+    return dict(
+        bestfit=nonlin_bestfit,
+        refslope=slope_reflevel,
+        good4fit=good4fit,
+        t_exp_reflevel=t_exp_reflevel,
+        fit_iterations=fit_iterations,
+        flags=flags,
+    )
 
 
 def nonlinfit_worker(jobqueue, resultqueue, times,
                      shmem_cube_raw, shmem_cube_refpixelcorr, shmem_cube_nonlinpoly, cube_shape,
+                     shmem_flags,
                      poly_order=3, ref_level=10000, saturation_level=55000,  workername="NonLinFitWorker"):
 
     logger = logging.getLogger(workername)
@@ -103,6 +174,10 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
     cube_nonlinpoly = numpy.ndarray(
         shape=(poly_order+1, cube_shape[1], cube_shape[2]), dtype=numpy.float32,
         buffer=shmem_cube_nonlinpoly.buf
+    )
+    nonlin_flags = numpy.ndarray(
+        shape=(cube_shape[1], cube_shape[2]), dtype=numpy.int16,
+        buffer=shmem_flags.buf
     )
 
 
@@ -122,7 +197,7 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
         reads_refpixelcorr = cube_refpixelcorr[:,y,x]
         reads_raw = cube_raw[:,y,x]
 
-        nonlin_bestfit, slope_reflevel = (
+        nonlin_bestfit, slope_reflevel, flags = (
             fit_pixel_nonlinearity(
                 reads_refpixelcorr=reads_refpixelcorr,
                 reads_raw=reads_raw,
@@ -131,12 +206,16 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
                 ref_level=ref_level,
                 saturation_level=saturation_level,
                 logger=logger,
+                pixel_id="x,y= %4d,%4d" % (x+1, y+1),
             )
         )
 
         t2 = time.time()
 
+        # store the results in shared memory for later output
         cube_nonlinpoly[:, y, x] = nonlin_bestfit
+        nonlin_flags[y,x] = flags
+
         #resultqueue.put((x, y, nonlin_bestfit, t2 - t1))
         resultqueue.put((x, y, t2 - t1, slope_reflevel))
 
@@ -196,6 +275,7 @@ def main():
     poly_order = 5
 
     dummy = numpy.array([], dtype=numpy.float32)
+    dummy_int = numpy.array([], dtype=numpy.int16)
     cube_shape = rss.cube_raw.shape
     shmem_nonlinpoly = multiprocessing.shared_memory.SharedMemory(
         name='nonlinpoly', create=True,
@@ -204,6 +284,19 @@ def main():
     result_nonlinpoly = numpy.ndarray(
         shape=(poly_order+1, cube_shape[1], cube_shape[2]),
         dtype=numpy.float32, buffer=shmem_nonlinpoly.buf)
+    # by default apply no correction, just copy the data
+    result_nonlinpoly[:,:,:] = 0.
+    result_nonlinpoly[-2,:,:] = 1.
+
+    # allocate memory for the flags frame
+    shmem_nonlinpoly_flags = multiprocessing.shared_memory.SharedMemory(
+        name='nonlinpoly_flags', create=True,
+        size=(dummy_int.itemsize * cube_shape[1] * cube_shape[2]),
+    )
+    result_nonlinpoly_flags = numpy.ndarray(
+        shape=(cube_shape[1], cube_shape[2]),
+        dtype=numpy.int16, buffer=shmem_nonlinpoly_flags.buf)
+
 
     if (not args.verify):
         # rss.fit_nonlinearity(ref_frame_id=4, make_plot=False)
@@ -219,7 +312,8 @@ def main():
 
         # logger.info("Starting to fill queue")
         n_jobs = 0
-        for x,y in itertools.product(range(2048), range(2048)):
+        refpixels = 4
+        for x,y in itertools.product(range(refpixels,2048-refpixels), range(refpixels, 2048-refpixels)):
 
             # while we use cube_linearized, we did not actually apply any nonlinearity corrections
             jobqueue.put((x, y))
@@ -238,6 +332,7 @@ def main():
                             shmem_cube_raw=rss.shmem_cube_raw,
                             shmem_cube_refpixelcorr=rss.shmem_cube_linearized,
                             shmem_cube_nonlinpoly=shmem_nonlinpoly,
+                            shmem_flags=shmem_nonlinpoly_flags,
                             cube_shape=rss.cube_raw.shape,
                             poly_order=poly_order,
                             ref_level=args.reflevel,
@@ -276,9 +371,18 @@ def main():
         img_hdu.header['POLYORDR'] = poly_order
         img_hdu.header['REFLEVEL'] = reflevel
         img_hdu.header['REFPIXEL'] = args.ref_pixel_mode,
+
+        flag_hdu = pyfits.ImageHDU(data=result_nonlinpoly_flags, name="FLAGS")
+        flag_hdu.header['FLAG_x00'] = "ok"
+        flag_hdu.header['FLAG_x01'] = "insufficient data"
+        flag_hdu.header['FLAG_x02'] = "correction turns negative"
+        flag_hdu.header['FLAG_x04'] = "correction slope < 0"
+        flag_hdu.header['FLAG_x08'] = "negative reference slope"
+        flag_hdu.header['FLAG_x10'] = "fitting error"
         output_hdulist = pyfits.HDUList([
             pyfits.PrimaryHDU(header=rss.ref_header),
             img_hdu,
+            flag_hdu,
             rss.provenance.write_as_hdu()
         ])
         logger.info("Writing correction coefficients to output FITS (%s)" % (out_fn))
@@ -375,11 +479,9 @@ def main():
 
     # Release shared memory
     del rss
-    shmem_nonlinpoly.close()
-    shmem_nonlinpoly.unlink()
-
-    # rss.plot_pixel_curve(818,1033)
-    # rss.plot_pixel_curve(1700,555)
+    for shmem in [shmem_nonlinpoly, shmem_nonlinpoly_flags]:
+        shmem.close()
+        shmem.unlink()
 
 
 
