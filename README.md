@@ -23,6 +23,7 @@ on any common astronomy system:
 * numpy
 * scipy
 * pandas 
+* sklearn (scikit-learn)
 * multiparlog -- parallel processing safe logging 
 * pyvo -- VO capabilities, including the SAMP protocol used only for the on-the-fly reduction tool
 

@@ -28,6 +28,7 @@ dependencies = [
     "numpy",
     "pandas",
     "scipy",
+    "sklearn",
     "pyvo",
     "watchdog",
     "sysv_ipc"
