@@ -63,6 +63,8 @@ def main():
     #                      help="rerun")
     cmdline.add_argument("--dumps", dest="write_dumps", default=None,
                          help="write intermediate process data [default: NO]")
+    cmdline.add_argument("--redo", dest="redo", default=False, action='store_true',
+                         help="re-run data reduction even if output file already exists")
     cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
                          help="generate debug plots for all pixels with persistency [default: NO]")
     cmdline.add_argument("--refpixel", dest="ref_pixel_mode", default='none',
@@ -76,7 +78,7 @@ def main():
     cmdline.add_argument("--ncores", dest="n_cores", default=None, type=int,
                          help="number of CPU cores to use")
     cmdline.add_argument("--algorithm", dest="algorithm", default='linreg', type=str,
-                         choices={"linreg", "rauscher2007", 'pairwise'},
+                         choices={"linreg", "rauscher2007", 'pairwise', 'linreg+recombine', 'rauscher2007+recombine'},
                          help="number of CPU cores to use")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
@@ -105,6 +107,23 @@ def main():
             logger.critical("Unable to start processing, read and resolve error message before continuing")
             mplog.report_exception(e, logger)
             continue
+
+        logger.debug("args.OUTPUT = %s" % (args.output_postfix))
+        if (args.output_postfix.lower().endswith(".fits")):
+            # this means we specify the filename directly
+            red_fn = args.output_postfix
+        elif (args.output_postfix.find("%BASE") >= 0):
+            red_fn = args.output_postfix.replace("%BASE", rss.filebase)
+        else:
+            red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
+        red_full_fn = os.path.join(args.output_directory, red_fn)
+        if (os.path.isfile(red_full_fn)):
+            if (not args.redo):
+                logger.info("output file %s already exists, skipping" % (red_full_fn))
+                continue
+            else:
+                logger.info("output file %s already exists, but --redo option was given, so we'll re-reduce" % (red_full_fn))
+
 
         # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
         #     logger.info("Attempting to load non-linearity from %s" % (args.nonlinearity_fn))
@@ -164,15 +183,6 @@ def main():
         #     logger.info("Writing persistency fit to %s ..." % (fit_fn))
         #     out_tmp.writeto(fit_fn, overwrite=True)
 
-        logger.debug("args.OUTPUT = %s" % (args.output_postfix))
-        if (args.output_postfix.lower().endswith(".fits")):
-            # this means we specify the filename directly
-            red_fn = args.output_postfix
-        elif (args.output_postfix.find("%BASE") >= 0):
-            red_fn = args.output_postfix.replace("%BASE", rss.filebase)
-        else:
-            red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
-        red_full_fn = os.path.join(args.output_directory, red_fn)
         logger.info("Writing reduction results to %s" % (os.path.abspath(red_full_fn)))
         try:
             rss.write_results(fn=red_full_fn, flat4salt=args.write_flat_for_salt)
