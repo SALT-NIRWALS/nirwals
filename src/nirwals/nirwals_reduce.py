@@ -164,7 +164,11 @@ def main():
         #     logger.info("Writing persistency fit to %s ..." % (fit_fn))
         #     out_tmp.writeto(fit_fn, overwrite=True)
 
-        red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
+        if (args.output_postfix.lower().endswith(".fits")):
+            # this means we specify the filename directly
+            red_fn = args.output_postfix
+        else:
+            red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
         red_full_fn = os.path.join(args.output_directory, red_fn)
         logger.info("Writing reduction results to %s" % (os.path.abspath(red_full_fn)))
         try:
