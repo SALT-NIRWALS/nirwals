@@ -108,7 +108,7 @@ def main():
             mplog.report_exception(e, logger)
             continue
 
-        logger.debug("args.OUTPUT = %s" % (args.output_postfix))
+        logger.debug("args.output = %s" % (args.output_postfix))
         if (args.output_postfix.lower().endswith(".fits")):
             # this means we specify the filename directly
             red_fn = args.output_postfix
@@ -123,6 +123,7 @@ def main():
                 continue
             else:
                 logger.info("output file %s already exists, but --redo option was given, so we'll re-reduce" % (red_full_fn))
+        logger.info("Output file will be: %s" % (red_full_fn))
 
 
         # if (args.nonlinearity_fn is not None and os.path.isfile(args.nonlinearity_fn)):
