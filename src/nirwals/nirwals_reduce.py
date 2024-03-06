@@ -51,6 +51,9 @@ def main():
                          help="addition to output filename")
     cmdline.add_argument("--outputdir", dest="output_directory", type=str, default=".",
                          help="directory for output files")
+    cmdline.add_argument("--logresults", dest="log_results", type=str, default=None,
+                         help="log file to contain list of output files for further analysis")
+
 
     cmdline.add_argument("--persistency", dest="persistency_mode", type=str, default="quick",
                          help="persistency mode")
@@ -192,6 +195,22 @@ def main():
             mplog.report_exception(e, logger)
         if (args.report_provenance):
             rss.provenance.report()
+
+        if (args.log_results is not None):
+            files = []
+            if (os.path.isfile(args.log_results)):
+                logger.debug("results log exists, reading existing list")
+                with open(args.log_results, 'r') as lf:
+                    files = [l.strip() for l in lf.readlines()]
+                logger.debug("Read %d files" % (len(files)))
+            # append the new file
+            files.append(red_full_fn)
+            # make sure we have no duplicate file listings
+            files = list(set(files))
+            # now write the new list of files to the results log
+            with open(args.log_results, 'w') as lf:
+                lf.writelines(files)
+            logger.info("wrote %d files to result log (%s)" % (len(files), args.log_results))
 
         # rss.plot_pixel_curve(818,1033)
         # rss.plot_pixel_curve(1700,555)
