@@ -112,8 +112,8 @@ def main():
         if (args.output_postfix.lower().endswith(".fits")):
             # this means we specify the filename directly
             red_fn = args.output_postfix
-        elif (args.output_postfix.find("%BASE") >= 0):
-            red_fn = args.output_postfix.replace("%BASE", rss.filebase)
+            if (red_fn.find("%BASE") >= 0):
+                red_fn = red_fn.replace("%BASE", rss.filebase)
         else:
             red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
         red_full_fn = os.path.join(args.output_directory, red_fn)
