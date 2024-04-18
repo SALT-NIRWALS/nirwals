@@ -209,7 +209,7 @@ def main():
             files = list(set(files))
             # now write the new list of files to the results log
             with open(args.log_results, 'w') as lf:
-                lf.writelines(files)
+                lf.write(os.linesep.join(files)+os.linesep)
             logger.info("wrote %d files to result log (%s)" % (len(files), args.log_results))
 
         # rss.plot_pixel_curve(818,1033)
