@@ -51,7 +51,7 @@ def fit_pixel_nonlinearity(
     good4fit = None
     t_exp_reflevel = -1
     fit_iterations = -1
-
+    extras = [numpy.NaN, numpy.NaN]
 
     try:
         # first, get an idealized target slope for the actual intensity
@@ -142,7 +142,7 @@ def fit_pixel_nonlinearity(
         nonlin_bestfit = fallback_solution
 
     if (not return_full):
-        return nonlin_bestfit, slope_reflevel, flags
+        return nonlin_bestfit, slope_reflevel, flags, extras
 
     return dict(
         bestfit=nonlin_bestfit,
@@ -151,12 +151,13 @@ def fit_pixel_nonlinearity(
         t_exp_reflevel=t_exp_reflevel,
         fit_iterations=fit_iterations,
         flags=flags,
+        extras=extras,
     )
 
 
 def nonlinfit_worker(jobqueue, resultqueue, times,
                      shmem_cube_raw, shmem_cube_refpixelcorr, shmem_cube_nonlinpoly, cube_shape,
-                     shmem_flags,
+                     shmem_flags, shmem_extras, n_extras,
                      poly_order=3, ref_level=10000, saturation_level=55000,  workername="NonLinFitWorker"):
 
     logger = logging.getLogger(workername)
@@ -179,6 +180,10 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
         shape=(cube_shape[1], cube_shape[2]), dtype=numpy.int16,
         buffer=shmem_flags.buf
     )
+    nonlin_extras = numpy.ndarray(
+        shape=(n_extras, cube_shape[1], cube_shape[2]), dtype=numpy.float32,
+        buffer=shmem_extras.buf
+    )
 
 
     while(True):
@@ -197,7 +202,7 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
         reads_refpixelcorr = cube_refpixelcorr[:,y,x]
         reads_raw = cube_raw[:,y,x]
 
-        nonlin_bestfit, slope_reflevel, flags = (
+        nonlin_bestfit, slope_reflevel, flags, extras = (
             fit_pixel_nonlinearity(
                 reads_refpixelcorr=reads_refpixelcorr,
                 reads_raw=reads_raw,
@@ -297,6 +302,16 @@ def main():
         shape=(cube_shape[1], cube_shape[2]),
         dtype=numpy.int16, buffer=shmem_nonlinpoly_flags.buf)
 
+    # allocate memory for extra data (stats, precision, saturation limit, etc)
+    n_extras = 2
+    shmem_nonlinpoly_extras = multiprocessing.shared_memory.SharedMemory(
+        name='nonlinpoly_extras', create=True,
+        size=(n_extras * dummy_int.itemsize * cube_shape[1] * cube_shape[2]),
+    )
+    result_nonlinpoly_extras = numpy.ndarray(
+        shape=(n_extras, cube_shape[1], cube_shape[2]),
+        dtype=numpy.float32, buffer=shmem_nonlinpoly_extras.buf)
+
 
     if (not args.verify):
         # rss.fit_nonlinearity(ref_frame_id=4, make_plot=False)
@@ -333,6 +348,8 @@ def main():
                             shmem_cube_refpixelcorr=rss.shmem_cube_linearized,
                             shmem_cube_nonlinpoly=shmem_nonlinpoly,
                             shmem_flags=shmem_nonlinpoly_flags,
+                            shmem_extras=shmem_nonlinpoly_extras,
+                            n_extras=n_extras,
                             cube_shape=rss.cube_raw.shape,
                             poly_order=poly_order,
                             ref_level=args.reflevel,
@@ -479,7 +496,7 @@ def main():
 
     # Release shared memory
     del rss
-    for shmem in [shmem_nonlinpoly, shmem_nonlinpoly_flags]:
+    for shmem in [shmem_nonlinpoly, shmem_nonlinpoly_flags, shmem_nonlinpoly_extras]:
         shmem.close()
         shmem.unlink()
 
