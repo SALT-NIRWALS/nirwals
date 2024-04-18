@@ -9,7 +9,7 @@ import scipy.optimize
 from sklearn import cluster, datasets, mixture
 from sklearn.neighbors import kneighbors_graph
 from sklearn.preprocessing import StandardScaler
-
+import matplotlib.pyplot as plt
 
 
 
@@ -170,9 +170,6 @@ def worker__fit_linear_regression(
             noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
             times = numpy.array(read_times)
 
-            if (recombine):
-                reads, recombine_corrections = recombine_signals(times, reads)
-
             good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0) & (noise>0)
             if (group_cutoff is not None and group_cutoff>0):
                 good_reads[group_cutoff:] = False
@@ -191,6 +188,14 @@ def worker__fit_linear_regression(
             times = times[good_reads]
             reads = reads[good_reads]
             noise = noise[good_reads]
+
+            if (recombine):
+                try:
+                    new_reads, recombine_corrections = recombine_signals(times, reads)
+                    reads = new_reads
+                except Exception as e:
+                    numpy.savetxt("recombine_dump_%d_%d.dat" % (x,y), numpy.array([times, reads]).T)
+                    logger.warning("Recombine failed for x/y = %d/%d: %s" % (x,y, str(e)))
 
             # slope = (n * numpy.sum(times*reads) - numpy.sum(times)*numpy.sum(reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
             # intercept = (numpy.sum(times**2)*numpy.sum(reads) - numpy.sum(times)*numpy.sum(times*reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
@@ -364,7 +369,10 @@ def fit_line(t,r):
     intercept = (numpy.sum(_t**2)*numpy.sum(_r) - numpy.sum(_t)*numpy.sum(_t*_r)) / (n*numpy.sum(_t**2) - numpy.sum(_t)**2)
     return slope,intercept
 
-def recombine_signals(times, reads):
+def noprint(*args):
+    pass
+
+def recombine_signals(times, reads, max_iterations=5, debug=False):
     """
     Helper function to recombine URG sequences with jumps due to cosmics or alternating "bias"-levels
 
@@ -376,14 +384,29 @@ def recombine_signals(times, reads):
     # reads = numpy.array(reads)
     # reads[700:] += 100
 
+    myprint = noprint
+    mysave = noprint
+    if (debug):
+        myprint = print
+        mysave = numpy.savetxt
+
+    # ensure only valid data
+    bad_data = ~numpy.isfinite(times) | ~numpy.isfinite(reads)
+    if (bad_data.any()):
+        raise ValueError("Invalid data encountered during signal recombination")
+
     n_clusters = 10
+
     corrected_reads = numpy.array(reads)
     corrections = numpy.zeros_like(times, dtype=float)
     iteration = 0
 
-    while (n_clusters > 1 and iteration < 10):
+    db_eps = 0.5
+    # max_iterations = 3
+
+    while (n_clusters > 1 and iteration < max_iterations):
         iteration += 1
-        # print("\n\n\n", "ITERATION", iteration)
+        myprint("\n\n\n", "ITERATION", iteration)
 
         # fig, axs = plt.subplots(ncols=2, figsize=(12, 3))
         # ax = axs[0]
@@ -391,43 +414,59 @@ def recombine_signals(times, reads):
         # ax.set_title("raw/working data")
         # ax.scatter(times, corrected_reads, s=1, c='black', label='raw')
 
-        # perform a clustering analysis on the raw sequence
-        db = cluster.DBSCAN(min_samples=10, eps=0.3)
         # prepare data for analysis
         raw_X = numpy.array([times, corrected_reads]).T
         scaled_X = StandardScaler().fit_transform(raw_X)
+        mysave("scaled_X", scaled_X)
+        myprint("scaled data", scaled_X.shape)
 
+        # perform a clustering analysis on the raw sequence
+        db = cluster.DBSCAN(min_samples=10, eps=db_eps)
         db.fit(scaled_X)
+        myprint("DBSCAN cluster", db)
+
         labels = db.labels_
-        # print(labels)
+        myprint(labels)
+        #  time.sleep(0.5)
+
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+        if (n_clusters_ < 1):
+            # nothing to do, either all noise or not enough data
+            break
+
         n_noise_ = list(labels).count(-1)
-        # print("Estimated number of clusters: %d" % n_clusters_)
-        # print("Estimated number of noise points: %d" % n_noise_)
+        myprint("Estimated number of clusters: %d" % n_clusters_)
+        myprint("Estimated number of noise points: %d" % n_noise_)
 
         unique_labels = numpy.array(list(set(labels)))
         unique_labels = unique_labels[unique_labels >= 0]
-        # print(unique_labels)
+        myprint("unique labels:", unique_labels)
         core_samples_mask = numpy.zeros_like(labels, dtype=bool)
         core_samples_mask[db.core_sample_indices_] = True
+        core_samples_mask[:] = True
         label_count = numpy.array([numpy.sum(labels == label) for label in unique_labels])
-        # print(label_count)
+        myprint("label counts", label_count)
+        myprint("SAVING DATA DUMP", iteration)
+        mysave("iteration_%d.all" % iteration, numpy.array([
+            times, corrected_reads, scaled_X[:,0], scaled_X[:,1], labels, core_samples_mask,
+        ]).T)
 
         # sort by number of reads in each sequence(
         sort_by_size = numpy.argsort(label_count)[::-1]
-        # print(label_count[sort_by_size])
-        sorted_labels = unique_labels[sort_by_size]
+        myprint("label count, sorted by size", label_count[sort_by_size])
+        labels_sorted_by_size = unique_labels[sort_by_size]
         sorted_size = label_count[sort_by_size]
-        # print("SORTED (by size) LABELS", sorted_labels)
+        myprint("SORTED (by size) LABELS", labels_sorted_by_size)
 
         min_times = numpy.zeros_like((unique_labels))
         max_times = numpy.zeros_like((unique_labels))
         mean_times = numpy.zeros_like((unique_labels))
-        for i_label, label in enumerate(sorted_labels):
-            # print("CHECKING", i_label, label)
-            this_sequence = (labels == label) & core_samples_mask
+        for i_label, label in enumerate(labels_sorted_by_size):
+            myprint("CHECKING idx=", i_label, "   // label=", label)
+            this_sequence = (labels == label) #& core_samples_mask
             this_times = times[this_sequence]
             this_reads = corrected_reads[this_sequence]
+            myprint("label=", label, "   nreads=", this_times.shape[0])
             min_times[i_label] = numpy.min(this_times)
             max_times[i_label] = numpy.max(this_times)
             mean_times[i_label] = numpy.nanmean(this_times)
@@ -438,16 +477,21 @@ def recombine_signals(times, reads):
             #             xycoords='data', zorder=91, fontsize='large', fontweight='bold',
             #             verticalalignment='center', horizontalalignment='center')
 
-        # print(numpy.array([unique_labels, min_times, max_times, mean_times]).T)
-        # print("MAIN SEQUENCE label", sorted_labels[0])
+        myprint("label // min-time // max-time // mean-time\n",
+                numpy.array([unique_labels, min_times, max_times, mean_times]).T)
+        myprint("MAIN SEQUENCE label", labels_sorted_by_size[0])
 
-        main_label = sorted_labels[0]
+        main_label = labels_sorted_by_size[0]
         main_sequence = (labels == main_label) & core_samples_mask
-        # print(main_sequence)
+        myprint(main_sequence)
         main_times = times[main_sequence]
         main_reads = corrected_reads[main_sequence]
         main_slope, main_intercept = fit_line(main_times, main_reads)
-        # print(main_slope, main_intercept)
+        myprint(main_slope, main_intercept)
+
+        mysave("it_%d_main.txt" % iteration, numpy.array([main_times, main_reads]).T)
+        myprint("main_slope/intercept:", main_slope, main_intercept)
+
         # ax.scatter(main_times, main_reads, s=40, alpha=0.1, color='red', label='main seq')
         # ax.plot(main_times, main_times * main_slope + main_intercept, color='red')
 
@@ -459,11 +503,11 @@ def recombine_signals(times, reads):
 
         # check if we have any overlapping sequences
         overlapping = (mean_times > min_times[0]) & (mean_times < max_times[0])
-        # print("OVERLAPPING:", overlapping)
+        myprint("OVERLAPPING:", overlapping)
         if (numpy.sum(overlapping[1:]) > 0):
             # we have at least one overlapping sequence
-            merge_label = sorted_labels[overlapping][1]
-            # print("merging label:", merge_label)
+            merge_label = labels_sorted_by_size[overlapping][1]
+            myprint("merging label:", merge_label)
             to_merge = (labels == merge_label)
             to_merge_core = to_merge & core_samples_mask
             merge_times = times[to_merge_core]
@@ -471,28 +515,29 @@ def recombine_signals(times, reads):
 
             # estimate the mean offset
             merge_offsets = (merge_times * main_slope + main_intercept) - merge_reads
-            # print(numpy.mean(merge_offsets))
-            # print(merge_offsets)
+            myprint(numpy.mean(merge_offsets))
+            myprint(merge_offsets)
             mean_merge_offset = numpy.mean(merge_offsets)
             corrections[to_merge] += mean_merge_offset
             corrected_reads[to_merge] += mean_merge_offset
 
-            # print("we have merged a sequence, restarting")
+            myprint("we have merged a sequence, restarting")
+            max_iterations += 1
             continue
 
-        # print("No overlapping sequences found, continuing")
+        myprint("No overlapping sequences found, continuing")
         #
         # now more overlapping sequences, so let's look for the closest one
         # note that index 0 is the main sequence itself
         #
         sequence_closeness = numpy.argsort(numpy.fabs(mean_times - mean_times[0]))
-        # print("    (delta)-time)", mean_times - mean_times[0])
-        # print("fabs(delta)-time)", numpy.fabs(mean_times - mean_times[0]))
-        # print("labels:", sorted_labels[sequence_closeness])
-        # print("closeness:", sequence_closeness)
+        myprint("    (delta)-time)", mean_times - mean_times[0])
+        myprint("fabs(delta)-time)", numpy.fabs(mean_times - mean_times[0]))
+        myprint("labels:", labels_sorted_by_size[sequence_closeness])
+        myprint("closeness:", sequence_closeness)
         closest_sequence = sequence_closeness[1]
-        # print("closest:", closest_sequence, sorted_labels[closest_sequence])
-        closest_label = sorted_labels[closest_sequence]
+        myprint("closest:", closest_sequence, labels_sorted_by_size[closest_sequence])
+        closest_label = labels_sorted_by_size[closest_sequence]
 
         # check out the other sequences
         next_sequence = (labels == closest_label)  #
@@ -500,7 +545,9 @@ def recombine_signals(times, reads):
         next_times = times[next_sequence_core]
         next_reads = corrected_reads[next_sequence_core]
         # ax.scatter(next_times, next_reads, s=15, alpha=0.2, label='next')
+        mysave("it_%d_next.txt" % iteration, numpy.array([next_times, next_reads]).T)
         next_slope, next_intercept = fit_line(next_times, next_reads)
+        myprint("next_slope/intercept:", next_slope, next_intercept)
         # ax.plot(next_times, next_times * next_slope + next_intercept, label='next fit')
         # ax.plot(main_times, main_times * main_slope + main_intercept, label='main fit')
 
@@ -513,16 +560,20 @@ def recombine_signals(times, reads):
             # this sequence comes earlier
             midpoint = 0.5 * (numpy.max(next_times) + numpy.min(main_times))
         else:
-            # print("This shouldn't happen!")
-            # print("    main:", numpy.min(main_times), numpy.max(main_times))
-            # print("    next:", numpy.min(next_times), numpy.max(next_times))
+            myprint("This shouldn't happen!")
+            myprint("    main:", numpy.min(main_times), numpy.max(main_times))
+            myprint("    next:", numpy.min(next_times), numpy.max(next_times))
             break
-        # print("mid-point", midpoint)
+        myprint("mid-point", midpoint)
 
         connection_point_main = main_slope * midpoint + main_intercept
         connection_point_next = next_slope * midpoint + next_intercept
+        # if (~numpy.isfinite(next_slope) or ~numpy.isfinite(next_intercept)):
+        #
+        # else:
+        #     sequence_offset
         sequence_offset = connection_point_next - connection_point_main
-        # print(connection_point_main, connection_point_next, "-->", sequence_offset)
+        myprint(connection_point_main, connection_point_next, "-->", sequence_offset)
 
         corrected_reads[next_sequence] -= sequence_offset
         corrections[next_sequence] -= sequence_offset
