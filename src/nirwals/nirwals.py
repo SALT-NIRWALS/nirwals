@@ -566,7 +566,11 @@ def worker__nonlinearity_correction(
 
 
 class NIRWALS(object):
+    """
+    NIRWALS class -- handles all NIRWALS data processing, from reading input frames into data cubes
+    to generating the final rate images to writing the final data products to disk.
 
+    """
     mask_SATURATED = 0x0001
     mask_LOW_RATE = 0x0002
     mask_BAD_DARK = 0x0004
@@ -588,6 +592,45 @@ class NIRWALS(object):
                  dumps=None,
                  every=None,
                  logger_name=None):
+        """
+        Initializer for the NIRWALS reduction class, which takes all configuration parameters needed for operation.
+
+        :param fn: filename of any file from the given read sequence. All other filenames are generated on the fly
+        based on this filename and the information in its headers.
+
+        :param max_number_files: Optional: Limit the number of reads to load to minimize memory footprint and/or speed
+        up processing
+
+        :param saturation: (Optional) read saturation levels on a pixel-by-pixel level from this file.
+
+        :param saturation_level: Saturation level; all pixels with values above this pixel will be masked out as Infs
+        during the data loading stage and ignored during all downstream processing.
+
+        :param saturation_fraction: not implemented
+
+        :param saturation_percentile:  not implemented
+
+        :param use_reference_pixels: Method to use for reference pixel correction.
+
+        :param algorithm: Name of algorithm to use for combining the reference pixel and nonlinearity corrected read
+        cubes into the desired rate frame.
+
+        :param mask_saturated_pixels:
+
+        :param nonlinearity: name of filename with nonlinearity correction parameters
+
+        :param n_cores: number of parallel CPU cores during some of the data processign steps.
+
+        :param speedy: select only a subset of input reads to speed up processing; no longer recommended
+
+        :param dumps: list of intermediate data products to write to disk during processing.
+
+        :param every: use only for testing; instead of loading all input reads, only read an evenly spaced subset of
+        input reads (i.e. read only every N-th read))
+
+        :param logger_name: name for logger.
+
+        """
 
         self.fn = fn
         self.filelist = []
@@ -671,6 +714,12 @@ class NIRWALS(object):
             raise(e)
 
     def nonlinearity_valid(self):
+        """
+        Check if the specified non-linearity correction file and the data within it is in the right format.
+
+        :return: True if data is valid, False otherwise
+
+        """
         if (self.nonlin_fn is None or not os.path.isfile(self.nonlin_fn)):
             return False
         try:
@@ -796,9 +845,24 @@ class NIRWALS(object):
 
         return
     def add_file(self, filename):
+        """
+        Not implemented; Add additional file during execution for on-the-fly reprocessing.
+        :param filename:
+        :return:
+        """
         return
 
     def load_all_files(self, max_number_files=None, mask_saturated_pixels=True):
+        """
+        Load all input files and perform initial data masking.
+
+        :param max_number_files:  Maximum number of files to read to speed up processing and reduce memory footprint.
+        Defaults to all files
+        :param mask_saturated_pixels: mask pixels above the saturation limit as Infs to exclude them from processing
+        down the line; activated by default
+        :return: Nothing
+
+        """
 
         if (max_number_files is None):
             max_number_files = self.max_number_files
@@ -930,7 +994,13 @@ class NIRWALS(object):
 
         self.image_stack_initialized = True
     def apply_dark_correction(self, dark_fn, dark_mode="differential"):
+        """
+        Apply dark correction to the input data, as given in counts/second; no longer functional, do not use!
 
+        :param dark_fn:
+        :param dark_mode:
+        :return:
+        """
         self.dark_cube = numpy.zeros_like(self.linearized_cube)
         if (dark_fn is None):
             self.logger.warning("No dark correction requested, skipping")
@@ -996,6 +1066,16 @@ class NIRWALS(object):
 
         return
     def dump_data(self, data, fn, datatype="?_default_?", extname=None):
+        """
+        Helper function to write intermediate data products to file, adding the appropriate header values
+
+        :param data: data frame/cube to write
+        :param fn:  output filename
+        :param datatype: used to identify type of data for logging
+        :param extname: name of extension in output file
+        :return:  None
+
+        """
         self.logger.info("Writing %s to %s" % (datatype, fn))
 
         # all output gets reference header information
@@ -1018,7 +1098,12 @@ class NIRWALS(object):
 
         return
     def apply_reference_pixel_corrections(self):
+        """
+        compute and derive the reference pixel correction for the raw input data cube. The actual correction is done
+        in XXX, this function handles the parallel execution.
 
+        :return: None
+        """
         n_reads = self.cube_raw.shape[0]
         self.provenance.add('reference-pixel-mode', self.use_reference_pixels)
 
@@ -1063,7 +1148,17 @@ class NIRWALS(object):
 
     def reduce(self, dark_fn=None, mask_bad_data=None, mask_saturated_pixels=False, group_cutoff=None,
                algorithm=None):
+        """
+        Main function called for the instrumental detrending and read fitting.
 
+        :param dark_fn:
+        :param mask_bad_data:
+        :param mask_saturated_pixels:
+        :param group_cutoff:
+        :param algorithm: Which algorithm to use to combine multiple reads/groups into the final rate image.
+
+        :return:
+        """
         if (algorithm is not None):
             self.algorithm = algorithm
 
@@ -1101,7 +1196,14 @@ class NIRWALS(object):
         # self.fit_pairwise_slopes(algorithm="pairwise_slopes")
 
     def dump_save(self, imgtype=None):
+        """
+        Helper function to write intermediate data products to file. This function handles the correct data
+        selection and filename generation, actual writing-to-disk is performed by calling :dump_data:
 
+        :param imgtype: what data product to write
+
+        :return:
+        """
         if (not self.write_dumps):
             # no dumps need to be written
             return
@@ -1274,6 +1376,12 @@ class NIRWALS(object):
 
         return
     def subtract_first_read(self):
+        """
+        Subtract the first read from all frames; No longer required as this functionality has been included
+        as part of the non-linearity processing.
+
+        :return:
+        """
         if (self.first_read_subtracted):
             self.logger.debug("First read already subtracted, skipping")
             return
@@ -1283,12 +1391,31 @@ class NIRWALS(object):
 
         self.image_stack -= self.first_read
         self.first_read_subtracted = True
+
     def _nonlinearity_fit_fct(self, p, x):
+        """
+        Helper function for the nonlinearity fitting; generates the model value based on times and fitting parameters.
+
+        :param p:
+        :param x:
+        :return:
+        """
         y = numpy.zeros(x.shape)
         for i in range(p.shape[0]):
             y += p[i] * x**(i+1)
         return y
     def _nonlinearity_fit_err_fct(self, p, x, y):
+        """
+        Helper function for the nonlinearity function; using the read times and fitting parameters calculates the
+        relative deviations between model and data, relative to the estimated data uncertainty (see chi^2 algorithm).
+        This function determines what is minimized during least-squares fitting.
+
+        :param p: input fitting parameters
+        :param x: input read times/frame number
+        :param y: input data
+        :return:
+
+        """
         yfit = self._nonlinearity_fit_fct(p, x)
         err = numpy.sqrt(y + 10 ** 2)
         return ((y - yfit) / err)
@@ -1322,7 +1449,14 @@ class NIRWALS(object):
 
         return pfit
     def fit_nonlinearity(self, ref_frame_id=10, max_linear=50000, make_plot=False):
+        """
+        No longer implemented; use functionality in nirwals_fit_nonlinearity instead.
 
+        :param ref_frame_id:
+        :param max_linear:
+        :param make_plot:
+        :return:
+        """
         # self.subtract_first_read()
         # if (self.first_read_subtracted):
         #     bad_data = (self.image_stack + self.first_read) > max_linear
@@ -1493,7 +1627,12 @@ class NIRWALS(object):
         pyfits.PrimaryHDU(data=nonlinearity_fits_inverse).writeto("nonlin_inverse.fits", overwrite=True)
         return
     def read_nonlinearity_corrections(self, nonlin_fn):
+        """
+        Read the nonlinearity coefficients from the specified input frame
 
+        :param nonlin_fn: filename with nonlinearity coefficients.
+        :return:
+        """
         self.logger.debug("Reading non-linearity: %s (file exists: %s)" % (
             nonlin_fn, os.path.isfile(nonlin_fn)))
         if (os.path.isfile(nonlin_fn)):
@@ -1510,8 +1649,12 @@ class NIRWALS(object):
         self.nonlin_fn = nonlin_fn
         self.nonlinearity_cube = nonlinearity_cube
 
-    def apply_nonlinearity_corrections(self, img_cube=None):
+    def apply_nonlinearity_corrections(self):
+        """
+        Apply the non-linearity corrections
 
+        :return:
+        """
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
 
         self.logger.info("Starting nonlinearity correction")
@@ -1554,7 +1697,14 @@ class NIRWALS(object):
         return
 
     def fit_pairwise_slopes(self, algorithm='pairwise_slopes', group_cutoff=None):
+        """
+        Perform the cube fitting, combining multiple reads into a single countrate image. The actual fitting functions
+        are implemented elsewhere (in nirwals_urg_algorithms), but this function handles all the parallel processing.
 
+        :param algorithm: what algorithm to use.
+        :param group_cutoff: limits the number of read-groups to process.
+        :return:
+        """
         self.logger.info("Start of up-the-ramp fitting (algorithm: %s)" % (algorithm))
         t1 = time.time()
         jobqueue = multiprocessing.JoinableQueue()
@@ -1616,7 +1766,11 @@ class NIRWALS(object):
         return
 
     def fix_final_headers(self):
+        """
+        Prepare the final image extension headers before writing results to disk.
 
+        :return:
+        """
         # Set some basic headers just to make sure
         self.ref_header['TELESCPE'] = "SALT"
         self.ref_header['INSTRUME'] = "NIRWALS"
@@ -1660,7 +1814,14 @@ class NIRWALS(object):
 
 
     def write_results(self, fn=None, flat4salt=False):
+        """
+        Write the final data product to disk. This includes the rate image itself, along with additional metadata, and
+        the data provenance table.
 
+        :param fn: filename for output file.
+        :param flat4salt:
+        :return:
+        """
         # Add/modify FITS headers for output
         self.fix_final_headers()
 
@@ -1731,7 +1892,13 @@ class NIRWALS(object):
         self.persistency_fit_global[:,:,:] = numpy.NaN
         self.alloc_persistency = True
     def fit_signal_with_persistency(self, n_workers=0, previous_frame=None, write_test_plots=False):
-
+        """
+        No longer functional, do not use
+        :param n_workers:
+        :param previous_frame:
+        :param write_test_plots:
+        :return:
+        """
         # by default use all existing CPU cores for processing
         if (n_workers <= 0):
             n_workers = multiprocessing.cpu_count()
@@ -1796,7 +1963,14 @@ class NIRWALS(object):
         out_tmp.writeto("persistency_fit_dump.fits", overwrite=True)
         return
     def fit_signal_with_persistency_singlepixel(self, x, y, debug=False, plot=False):
-
+        """
+        no longer functional, do not use
+        :param x:
+        :param y:
+        :param debug:
+        :param plot:
+        :return:
+        """
         _x = x - 1
         _y = y - 1
 
@@ -1878,7 +2052,20 @@ class NIRWALS(object):
                          diff_vs_cum=False,
                          show_fits=False, show_errors=False,
                          show_plot=False):
+        """
+        Used only for debugging, do not use
 
+        :param x:
+        :param y:
+        :param filebase:
+        :param cumulative:
+        :param differential:
+        :param diff_vs_cum:
+        :param show_fits:
+        :param show_errors:
+        :param show_plot:
+        :return:
+        """
         # self.subtract_first_read()
         counts = self.image_stack[:, y-1, x-1]
         zerolevel = self.image_stack[0, y-1,x-1]
@@ -1999,26 +2186,6 @@ class NIRWALS(object):
             frame_number, raw_series, linearized
             ]+extra_pixels).T
         )
-    def _parallel_worker(self, job_queue, result_queue, execute_function, is_in_class=True):
-        self.logger.debug("Worker has started")
-        while (True):
-            job = job_queue.get()
-            if (job is None):
-                job_queue.task_done()
-                self.logger.debug("Worker shutting down")
-                break
-
-            [x, y] = job
-            if ((y % 10) == 0 and x == 0): print(job)
-
-            if (is_in_class):
-                result = execute_function(x, y)
-            else:
-                result = execute_function(self, x, y)
-
-            result_queue.put((x, y, result))
-
-            job_queue.task_done()
     def parallel_fitter(self, xrange=None, yrange=None,
                         execute_function=None, return_dim=1, is_in_class=True,
                         n_workers=None):
@@ -2163,6 +2330,11 @@ class NIRWALS(object):
 
         return prior_fn, delta_seconds
     def __del__(self):
+        """
+        Class destructor; this is where we release and clean up shared memory allocation used for parallel processing
+
+        :return:
+        """
         self.logger.info("Releasing shared memory allocations")
         # self.logger.debug("Running destructor and cleaning up shared memory")
         # clean up shared memory
