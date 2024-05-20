@@ -59,6 +59,8 @@ def main():
                          help="persistency mode")
     cmdline.add_argument("--saturation", dest="saturation", default=62000,
                          help="saturation value/file")
+    cmdline.add_argument("--every", dest="every", default=None, type=int,
+                         help="read only every n-th frame [only use for testing, NOT in production]")
 
     # cmdline.add_argument("healpix32", nargs="+", type=int,
     #                      help="list of input filenames")
@@ -105,6 +107,7 @@ def main():
                       speedy=args.speedy,
                       n_cores=args.n_cores,
                       dumps=dumpfiles,
+                      every=args.every,
                       )
         except Exception as e:
             logger.critical("Unable to start processing, read and resolve error message before continuing")
