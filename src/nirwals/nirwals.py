@@ -586,6 +586,7 @@ class NIRWALS(object):
                  n_cores=0,
                  speedy=False,
                  dumps=None,
+                 every=None,
                  logger_name=None):
 
         self.fn = fn
@@ -655,6 +656,7 @@ class NIRWALS(object):
         self.logger.debug("Reading exposure setup")
         self.read_exposure_setup()
         self.speedy = speedy
+        self.every = every
 
         self.logger.debug("Retrieving filelist")
         self.get_full_filelist()
@@ -808,6 +810,12 @@ class NIRWALS(object):
 
         # open all frames
         _filelist = self.filelist
+
+        if (self.every is not None):
+            # special test mode
+            _filelist = _filelist[::self.every]
+            self.n_groups = len(_filelist)
+
         # if (max_number_files > 0):
         #     print("Limiting filelist to %d files" % (max_number_files))
         #     _filelist = _filelist[:max_number_files]
@@ -824,8 +832,9 @@ class NIRWALS(object):
 
         self.logger.debug("raw image cube dimensions: %s" % (str(self.cube_raw.shape)))
 
+
         # TODO: Add proper handling for combined Fowler and up-the-ramp sampling
-        for fn in _filelist:
+        for _if, fn in enumerate(_filelist):
             try:
                 hdulist = pyfits.open(fn)
                 hdr = hdulist[0].header
@@ -840,7 +849,7 @@ class NIRWALS(object):
 
             # hdulist.info()
 
-            img_group = hdr['GROUP']
+            img_group = hdr['GROUP'] if self.every is None else _if #hdr['GROUP']//self.every
             img_read = hdr['READ']
             img_exptime = hdr['ACTEXP'] / 1000000. # convert time from raw microseconds to seconds
             self.logger.debug("FN=%s // grp=%d rd=%d exptime=%.4f" % (fn, img_group, img_read, img_exptime))
