@@ -47,6 +47,7 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
         if (event.src_path.upper().find("RESET") >= 0):
             self.logger.info("File (%s) is a RESET frame, we don't want those" % (event.src_path))
             return
+
         # and even if it smells like a FITS file, it should be in the form of *.#.fits
         dir,fn = os.path.split(event.src_path)
         filesize = os.path.getsize(event.src_path)
@@ -58,6 +59,17 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
             return
         if (not items[-2].isnumeric()):
             self.logger.info("File (%s) doesn't look like a FITS we are looking for" % (event.src_path))
+            return
+
+        filesize = os.path.getsize(event.src_path)
+        self.logger.debug("FILE SIZE CHECK: %s %d" % (event.src_path, filesize))
+        # try opening the file to access the data to make sure that works
+        try:
+            hdulist = pyfits.open(event.src_path)
+            data = hdulist[0].data.astype(float) * 1.0
+            hdr = repr(hdulist[0].header)
+        except Exception as e:
+            self.logger.warning("Problems accessing data in %s, ignoring this file" % (event.src_path))
             return
 
         # We past all preliminary checks, so hand on the rest of the work to parallel worker
