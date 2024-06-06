@@ -50,9 +50,6 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
 
         # and even if it smells like a FITS file, it should be in the form of *.#.fits
         dir,fn = os.path.split(event.src_path)
-        filesize = os.path.getsize(event.src_path)
-        self.logger.info("FILE SIZE CHECK: %s %d" % (event.src_path, filesize))
-
         items = fn.split(".")
         if (len(items) != 5):
             self.logger.info("File (%s) doesn't look like a FITS we are looking for (not in the form of *.#.#.#.fits)" % (event.src_path))
@@ -250,6 +247,10 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
                 self.shmem_buf[:,:] = data[:,:]
                 self.samp_cli.enotify_all(mtype='ds9.set', cmd='update now')
                 self.logger.debug("Using shared memory, telling ds9 to update")
+                if (out_fn is None):
+                    out_fn = "<shared-memory>"
+                else:
+                    out_fn = out_fn+"+<shared-memory>"
             else:
                 self.logger.debug("Sending command to load new FITS (%s) to ds9" % (stage_fn))
                 self.samp_cli.enotify_all(mtype='ds9.set', cmd='frame 7')
@@ -259,6 +260,7 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
                 # self.samp_cli.enotify_all(mtype='ds9.set', cmd='array file://%s' % (os.path.abspath(stage_fn)))
 
         return out_fn
+
 
     def run(self):
 
