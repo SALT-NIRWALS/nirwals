@@ -127,15 +127,12 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         dirname, fn = os.path.split(filename)
         seq_base = ".".join(fn.split(".")[:-3])
 
-        # update the name of the sequence we are currently working on
-        self.current_base = seq_base
-
         # find the first read in this sequence
-        self.sequence_firstread_fn = os.path.join(dirname, "%s.1.1.fits" % (seq_base))
+        self.sequence_firstread_fn = filename # os.path.join(dirname, "%s.1.1.fits" % (seq_base))
         if (not os.path.isfile(self.sequence_firstread_fn)):
             self.logger.warning("Unable to find first read in this sequence (%s)" % (self.sequence_firstread_fn))
             self.good_sequence = False
-            return
+            return False
 
         try:
             hdulist = pyfits.open(self.sequence_firstread_fn)
@@ -151,15 +148,18 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
         except Exception as e:
             self.logger.critical("Error while accessing data in %s" % (filename))
             self.good_sequence = False
-            self.read_minimum = 0
-            self.read_minimum_exptime = 0
+            # self.read_minimum = 0
+            # self.read_minimum_exptime = 0
 
             # mplog.report_exception(e, self.logger)
-            return
+            return False
+
+        # update the name of the sequence we are currently working on
+        self.current_base = seq_base
 
         self.latest_result = None
         self.saturated = None
-        pass
+        return True
 
     def next_read(self, filename):
         self.logger.debug("Handling new read: %s (%s)" % (filename, type(filename)))
@@ -278,18 +278,23 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             seq_base = ".".join(fn.split(".")[:-3])
             # print(seq_base)
             # print(type(new_filename))
+            out_fn = None
             if (seq_base == self.current_base):
                 # only reduce every N-th frame (or every frame if disabled)
+                self.logger.info("%s is a new frame for an already started sequence" % (new_filename))
                 if (self.every is None or (every_counter % self.every) == 0):
                     out_fn = self.next_read(new_filename)
                 else:
                     self.logger.info("Ignoring new frame (%s), currently on frame %d of %d" % (
                         fn, (every_counter%self.every), self.every))
-                    out_fn = None
             else:
-                self.start_new_sequence(new_filename)
-                out_fn = "NEW SEQ"
-                every_counter = 0
+                self.logger.info("%s is a possible start of a new sequence" % (new_filename))
+                success = self.start_new_sequence(new_filename)
+                if (not success):
+                    self.logger.warning("Unable to start new sequence based on %s" % (new_filename))
+                else:
+                    out_fn = "NEW SEQ"
+                    every_counter = 0
             end_time = time.time()
 
             self.incoming_queue.task_done()
