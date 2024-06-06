@@ -137,15 +137,25 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
             self.good_sequence = False
             return
 
-        hdulist = pyfits.open(self.sequence_firstread_fn)
-        data = hdulist[0].data.astype(float)
-        refpixels = nirwals.reference_pixels_to_background_correction(data, mode=self.refpixelmode)
-        data -= refpixels
+        try:
+            hdulist = pyfits.open(self.sequence_firstread_fn)
+            data = hdulist[0].data.astype(float)
+            refpixels = nirwals.reference_pixels_to_background_correction(data, mode=self.refpixelmode)
+            data -= refpixels
 
-        self.read_minimum = data
-        self.read_mimimum_exptime = hdulist[0].header['ACTEXP'] / 1e6
-        self.logger.info("Sequence start is GOOD!")
-        self.good_sequence = True
+            self.read_minimum = data
+            self.read_mimimum_exptime = hdulist[0].header['ACTEXP'] / 1e6
+            self.logger.info("Sequence start is GOOD!")
+            self.good_sequence = True
+        
+        except Exception as e:
+            self.logger.critical("Error while accessing data in %s" % (filename))
+            self.good_sequence = False
+            self.read_minimum = 0
+            self.read_minimum_exptime = 0
+
+            # mplog.report_exception(e, self.logger)
+            return
 
         self.latest_result = None
         self.saturated = None
