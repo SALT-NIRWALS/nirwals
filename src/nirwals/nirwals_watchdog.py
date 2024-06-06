@@ -166,17 +166,18 @@ class NirwalsOnTheFlyReduction(multiprocessing.Process):
 
         _, fn = os.path.split(filename)
 
-        hdulist = pyfits.open(filename)
-        if ('WATCHRED' in hdulist[0].header):
-            if (hdulist[0].header['WATCHRED'] == 'yes'):
-                self.logger.warning("Found watchdog output file among the input files. Check configuration!!!!")
-                return None
-
         try:
+            hdulist = pyfits.open(filename)
+            if ('WATCHRED' in hdulist[0].header):
+                if (hdulist[0].header['WATCHRED'] == 'yes'):
+                    self.logger.warning("Found watchdog output file among the input files. Check configuration!!!!")
+                    return None
+
             data = hdulist[0].data.astype(float)
         except Exception as e:
             self.logger.critical("Error while accessing data in %s" % (filename))
-            mplog.report_exception(e, self.logger)
+            # mplog.report_exception(e, self.logger)
+            return None
 
         saturated = (data > 62000)
         if (self.saturated is None):
