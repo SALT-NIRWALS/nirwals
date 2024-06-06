@@ -49,6 +49,9 @@ class NirwalsQuicklook(watchdog.events.PatternMatchingEventHandler):
             return
         # and even if it smells like a FITS file, it should be in the form of *.#.fits
         dir,fn = os.path.split(event.src_path)
+        filesize = os.path.getsize(event.src_path)
+        self.logger.info("FILE SIZE CHECK: %s %d" % (event.src_path, filesize))
+
         items = fn.split(".")
         if (len(items) != 5):
             self.logger.info("File (%s) doesn't look like a FITS we are looking for (not in the form of *.#.#.#.fits)" % (event.src_path))
