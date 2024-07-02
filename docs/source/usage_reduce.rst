@@ -24,7 +24,7 @@ for each parameter is presented below::
                           [--persistency PERSISTENCY_MODE] [--saturation SATURATION]
                           [--dumps WRITE_DUMPS] [--debugpngs]
                           [--refpixel REF_PIXEL_MODE] [--flat4salt] [--report]
-                          [--speedy] [--ncores N_CORES]
+                          [--speedy] [--ncores N_CORES] [--gain]
                           [--algorithm {rauscher2007,linreg,pairwise}]
                           files [files ...]
 
@@ -127,6 +127,9 @@ only to be used for debugging:
   data cube. Use rssnir_makedark.py to generate the dark calibration frame. Currently
   not implemented since unstable dark-currents do not improve output data quality.
 
+:kbd:`--gain`
+  Correct final results with each amplifier gain; gain values are shipped with the code itself,
+  and are automatically selected based on the data the data was taken.
 
 Example call::
 
