@@ -70,6 +70,8 @@ def main():
                          help="write intermediate process data [default: NO]")
     cmdline.add_argument("--redo", dest="redo", default=False, action='store_true',
                          help="re-run data reduction even if output file already exists")
+    cmdline.add_argument("--gain", dest="gain", default=False, action='store_true',
+                         help="Apply automatic gain correction")
     cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
                          help="generate debug plots for all pixels with persistency [default: NO]")
     cmdline.add_argument("--refpixel", dest="ref_pixel_mode", default='none',
@@ -108,6 +110,7 @@ def main():
                       n_cores=args.n_cores,
                       dumps=dumpfiles,
                       every=args.every,
+                      correct_gain=args.gain,
                       )
         except Exception as e:
             logger.critical("Unable to start processing, read and resolve error message before continuing")

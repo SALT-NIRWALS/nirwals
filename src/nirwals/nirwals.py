@@ -591,7 +591,9 @@ class NIRWALS(object):
                  speedy=False,
                  dumps=None,
                  every=None,
-                 logger_name=None):
+                 correct_gain=False,
+                 logger_name=None
+                 ):
         """
         Initializer for the NIRWALS reduction class, which takes all configuration parameters needed for operation.
 
@@ -614,6 +616,9 @@ class NIRWALS(object):
 
         :param algorithm: Name of algorithm to use for combining the reference pixel and nonlinearity corrected read
         cubes into the desired rate frame.
+
+        :param correct_gain: Apply amplifier-specific gain correction to the data to yield results in electron/second (
+        (rather than the default of ADU counts/second)
 
         :param mask_saturated_pixels:
 
@@ -645,6 +650,7 @@ class NIRWALS(object):
         self.first_read = None
         self.first_header = None
         self.saturation_frame = None
+        self.gain = None
 
         self.nonlin_fn = nonlinearity
         self.nonlinearity_cube = None
@@ -695,6 +701,8 @@ class NIRWALS(object):
 
         self.n_cores = n_cores if (n_cores is not None and n_cores > 0) else multiprocessing.cpu_count()
         self.logger.info("Using %d CPU cores/threads for parallel processing" % (self.n_cores))
+
+        self.correct_gain = correct_gain
 
         self.logger.debug("Reading exposure setup")
         self.read_exposure_setup()
@@ -817,11 +825,15 @@ class NIRWALS(object):
         self.n_ramps = 1 #self.ref_header['NRAMPS']
         self.n_reads = 1 #self.ref_header['NREADS']
         self.n_outputs = self.ref_header['NOUTPUTS']
-        self.gain = self.ref_header['GAIN']
 
         # exposure and other times
         self.exptime = self.ref_header['USEREXP'] / 1000.
         self.diff_exptime = self.exptime / self.n_groups
+
+        if (self.correct_gain):
+            self.gain = nirwals.data.NirwalsGain(self.ref_header)
+
+
     def get_full_filelist(self):
         # get basedir
         fullpath = os.path.abspath(self.fn)
@@ -1186,6 +1198,13 @@ class NIRWALS(object):
         else:
             self.apply_nonlinearity_corrections()
         self.dump_save(imgtype='linearized')
+
+        if (self.correct_gain):
+            self.apply_gain_correction()
+            self.provenance.add('gain', self.gain.get_name())
+        else:
+            self.provenance.add('gain', 'no-gain-correction')
+
 
         # self.logger.info("Dumping corrected datacube to file")
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("dump_cube.fits", overwrite=True)
@@ -1694,6 +1713,15 @@ class NIRWALS(object):
 
         self.logger.info("Non-linearity correction complete after taking %.3f seconds" % (t2-t1))
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_after_nonlin.fits", overwrite=True)
+        return
+
+    def apply_gain_correction(self):
+        self.logger.info("Applying gain correction: %s", self.gain.get_name())
+        self.logger.debug("Gain values used: %s", ",".join("%.4f" % g for g in self.gain.get_gains()))
+        gain_strip = self.gain.amp_corrections()
+        for read in range(self.cube_linearized.shape[0]):
+            self.cube_linearized[read,:,:] *= gain_strip
+        self.logger.debug("Done with applying GAIN corrections")
         return
 
     def fit_pairwise_slopes(self, algorithm='pairwise_slopes', group_cutoff=None):
