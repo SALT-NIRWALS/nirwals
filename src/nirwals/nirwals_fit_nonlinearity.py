@@ -146,17 +146,19 @@ def fit_pixel_nonlinearity(
             # print('corrected:', nonlin_bestfit)
 
     except ValueError as e:
-        logger.warning("Unable to fit non-linearity for %s (%s)" % (pixel_id, str(e)))
+        logger.debug("Unable to fit non-linearity for %s (%s)" % (pixel_id, str(e)))
 
     except Exception as e:  # numpy.linalg.LinAlgError as e:
         flags |= NONLIN_FLAG_FITERROR
-        logger.warning("Unable to fit non-linearity for %s (%s)" % (pixel_id, str(e)))
+        logger.debug("Unable to fit non-linearity for %s (%s)" % (pixel_id, str(e)))
 
 
     #
     # calculate all extras
     #
     extras[0] = saturation_level
+    extras[6] = numpy.nanmax(reads_raw)
+    extras[7] = numpy.nanmax(reads_refpixelcorr)
 
     # 1 sigma precision
     if (flags == 0): # only if all fitting worked out
@@ -205,6 +207,7 @@ def fit_pixel_nonlinearity_autosaturation(
         poly_order=3, ref_level=10000, saturation_level=55000, min_flux=200,
         logger=None, n_iterations=4, normalize_linear_term=True, pixel_id=None,
         return_full=False, optimize_saturation=True, optimize_dt=10, plot_fn=None,
+        debug=False,
 ):
 
     if (not optimize_saturation):
@@ -271,11 +274,22 @@ def fit_pixel_nonlinearity_autosaturation(
 
         logger.debug("saturation time/index: %.1f / %d" % (saturation_time, saturation_time_index))
         new_saturation_level = reads_raw[saturation_time_index]
+        if (debug):
+            print(iteration, new_saturation_level, n_saturated_reads, saturation_time_index)
+            numpy.savetxt("debugdump_diff_%s_it%d.txt" % (debug, iteration), numpy.array([
+                diff_times, diff_flux
+            ]).T)
+            numpy.savetxt("debugdump_%s_it%d.txt" % (debug, iteration), numpy.array([
+                times, reads_refpixelcorr
+            ]).T)
 
         full_well_depth_raw = reads_refpixelcorr[saturation_time_index]
         full_well_depth_corrected = corr[saturation_time_index]
         logger.debug("Updated extras: saturation=%.1f    fwd-raw=%.1f   fwd-corr=%.1f",
                      new_saturation_level, full_well_depth_raw, full_well_depth_corrected)
+
+        if (debug):
+            plot_fn = "debug_%s_it%d.png" % (debug, iteration)
 
         if (plot_fn is not None):
 
@@ -316,16 +330,19 @@ def fit_pixel_nonlinearity_autosaturation(
                 fig.show()
             else:
                 fig.savefig(plot_fn)
+            # plt.close(fig)
 
         if (n_saturated_reads > 0):
             # nothing saturated found, no need to refine saturation any further
-            break
+            pass
+            #break
 
         saturation_level = new_saturation_level
 
     extras[0] = saturation_level
     extras[1] = full_well_depth_raw
     extras[2] = full_well_depth_corrected
+    if (debug): print(saturation_level, extras)
 
     if (not return_full or True):
         return nonlin_bestfit, slope_reflevel, flags, extras
@@ -402,10 +419,13 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
                 logger=logger,
                 pixel_id="x,y= %4d,%4d" % (x+1, y+1),
                 optimize_saturation=optimize_saturationlevel,
+                debug=False, #"x=%d_y=%d" % (x,y) if x==y else False,
             )
         )
 
         t2 = time.time()
+
+        if (x == y): print(" ".join(["%.2f" % f for f in extras]))
 
         # store the results in shared memory for later output
         cube_nonlinpoly[:, y, x] = nonlin_bestfit
@@ -415,7 +435,7 @@ def nonlinfit_worker(jobqueue, resultqueue, times,
         #resultqueue.put((x, y, nonlin_bestfit, t2 - t1))
         resultqueue.put((x, y, t2 - t1, slope_reflevel))
 
-        jobqueue.task_done()
+        jobqueue.task_done() 
 
     shmem_cube_raw.close()
     shmem_cube_refpixelcorr.close()
@@ -458,6 +478,8 @@ def main():
 
     fn = args.files[0]
     saturation_fn = args.saturation
+    logger.info("Saturation level optimization: %s" % ("ON" if args.optimize_saturation else "OFF"))
+
     logger.info("Initializing data")
     rss = NIRWALS(fn, saturation=68000, #saturation_fn,
                   max_number_files=args.max_number_files,
@@ -471,6 +493,12 @@ def main():
 
     logger.info("Allocating shared memory for output")
     poly_order = 5
+
+    logger.info("Dumping intermediate products for inspection")
+    rss.write_dumps = 'all'
+    rss.filebase = "fit_nonlinearity"
+    # rss.dump_save(imgtype='raw')
+    # rss.dump_save(imgtype='refpixcorr')
 
     dummy = numpy.array([], dtype=numpy.float32)
     dummy_int = numpy.array([], dtype=numpy.int16)
@@ -504,6 +532,7 @@ def main():
         shape=(N_EXTRAS, cube_shape[1], cube_shape[2]),
         dtype=numpy.float32, buffer=shmem_nonlinpoly_extras.buf)
 
+    logger.info("Also generating %d extras alongside the nonlinearity coefficients" % (N_EXTRAS))
 
     if (not args.verify):
         # rss.fit_nonlinearity(ref_frame_id=4, make_plot=False)
@@ -598,9 +627,12 @@ def main():
             pyfits.ImageHDU(data=result_nonlinpoly_extras[3], name="PRECISION_MEDIAN_CLIPPED"),
             pyfits.ImageHDU(data=result_nonlinpoly_extras[4], name="PRECISION_SIGMA_CLIPPED"),
             pyfits.ImageHDU(data=result_nonlinpoly_extras[5], name="PRECISION_SIGMA_FULL"),
+            pyfits.ImageHDU(data=result_nonlinpoly_extras[6], name="MAX_READ_RAW"),
+            pyfits.ImageHDU(data=result_nonlinpoly_extras[7], name="MAX_READ_REFPIXCORR"),
             rss.provenance.write_as_hdu()
         ])
         logger.info("Writing correction coefficients to output FITS (%s)" % (out_fn))
+        output_hdulist.info()
 
         output_hdulist.writeto(out_fn, overwrite=True)
 
