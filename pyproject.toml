@@ -6,14 +6,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nirwals"
-version = "0.1.0"
+version = "0.1.2"
 
 authors = [
   { name="Ralf Kotulla", email="ralf.kotulla@gmail.com" },
 ]
 description = "basic instrument signature removal for the NIRWALS instrument on the SALT telescope"
 readme = "README.md"
-license = { file="LICENSE" }
+license = { text = "BSD-3-Clause" }
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -58,27 +58,25 @@ where = ['src']
 [tool.setuptools.package-data]
 "nirwals.data" = ["*.csv"]
 
-[tool.poetry]
-name='nirwals'
-version = "0.0.0"
-description = "basic instrument signature removal for the NIRWALS instrument on the SALT telescope"
-readme = "README.md"
-license = { file="LICENSE" }
-authors = [
-  { name="Ralf Kotulla", email="ralf.kotulla@gmail.com" },
-]
-#license = { file="LICENSE" }
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-]
-
-
-[tool.poetry-dynamic-versioning]
-enable = true
-vcs = "git"
-#style = "semver"
-style = 'pep440'
+#[tool.poetry]
+#name='nirwals'
+#version = "0.0.0"
+#description = "basic instrument signature removal for the NIRWALS instrument on the SALT telescope"
+#readme = "README.md"
+#authors = [ name="Ralf Kotulla", email="ralf.kotulla@gmail.com" }
+#license = "BSD-3-Clause"
+#classifiers = [
+#    "Programming Language :: Python :: 3",
+#    "License :: OSI Approved :: MIT License",
+#    "Operating System :: OS Independent",
+#]
+#
+#
+#[tool.poetry-dynamic-versioning]
+#enable = true
+#vcs = "git"
+##style = "semver"
+#style = 'pep440'
+#
 
 
