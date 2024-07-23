@@ -122,7 +122,11 @@ def main():
             # this means we specify the filename directly
             red_fn = args.output_postfix
             if (red_fn.find("%BASE") >= 0):
-                red_fn = red_fn.replace("%BASE", rss.filebase)
+                # Moses additions
+                filename = rss.filebase
+                filename1 = filename.split(".")[0] + "." + filename.split(".")[2] + ".fits"
+                # changed rss.filebase in next line to filename1
+                red_fn = red_fn.replace("%BASE", filename1)
         else:
             red_fn = "%s.%s.fits" % (rss.filebase, args.output_postfix)
         red_full_fn = os.path.join(args.output_directory, red_fn)
