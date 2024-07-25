@@ -76,7 +76,7 @@ class DataProvenance( object ):
 
         if (isinstance(value, (int, float, complex)) and not isinstance(value, bool)):
             pass
-        elif (isinstance(value, bool))
+        elif (isinstance(value, bool)):
             value = str(value)
         elif isinstance(value, str):
             if (os.path.isfile(value) or os.path.isdir(value)):
