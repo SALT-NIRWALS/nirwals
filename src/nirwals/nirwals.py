@@ -693,11 +693,14 @@ class NIRWALS(object):
                 try:
                     _sat = float(saturation)
                     self.saturation_level = _sat
+                    self.logger.info("Setting custom saturation: %.2f" % (_sat))
                     self.provenance.add("saturation-level", _sat)
                 except:
+                    self.logger.warn("Unable to handle custom saturation level: %s" % (saturation))
                     pass
         else:
             self.provenance.add("saturation-level", self.saturation_level)
+            self.logger.info("Using default saturation level: %.2f" % (self.saturation_level))
 
         self.n_cores = n_cores if (n_cores is not None and n_cores > 0) else multiprocessing.cpu_count()
         self.logger.info("Using %d CPU cores/threads for parallel processing" % (self.n_cores))
