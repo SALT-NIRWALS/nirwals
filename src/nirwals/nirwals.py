@@ -696,7 +696,7 @@ class NIRWALS(object):
                     self.logger.info("Setting custom saturation: %.2f" % (_sat))
                     self.provenance.add("saturation-level", _sat)
                 except:
-                    self.logger.warn("Unable to handle custom saturation level: %s" % (saturation))
+                    self.logger.warn("Unable to handle custom saturation level: %s (%s)" % (saturation, type(saturation)))
                     pass
         else:
             self.provenance.add("saturation-level", self.saturation_level)
