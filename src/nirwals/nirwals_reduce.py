@@ -124,7 +124,7 @@ def main():
             if (red_fn.find("%BASE") >= 0):
                 # Moses additions
                 filename = rss.filebase
-                filename1 = filename.split(".")[0] + "." + filename.split(".")[2] + ".fits"
+                filename1 = filename.split(".")[0] + "." + filename.split(".")[2]
                 # changed rss.filebase in next line to filename1
                 red_fn = red_fn.replace("%BASE", filename1)
         else:
