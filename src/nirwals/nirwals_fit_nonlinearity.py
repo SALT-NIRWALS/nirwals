@@ -118,7 +118,10 @@ def fit_pixel_nonlinearity(
             fit_iterations.append(nonlin_bestfit)
 
         # check if ANY of the correction values turn negative
-        inp = numpy.arange(min_flux, numpy.nanmax(reads_refpixelcorr)) #50000)
+        not_saturated = (reads_raw < saturation_level)
+        max_unsat_refpixcorr = numpy.max(reads_refpixelcorr[not_saturated])
+
+        inp = numpy.arange(min_flux, max_unsat_refpixcorr)
         out = numpy.polyval(nonlin_bestfit, inp)
         if ((out < nonlin_bestfit[-1]).any()):
             # numpy.savetxt("nonlin_negatives_%s.txt" % pixel_id.replace(" ",""), numpy.array([inp, out]).T)
