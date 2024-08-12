@@ -655,6 +655,8 @@ class NIRWALS(object):
         self.nonlin_fn = nonlinearity
         self.nonlinearity_cube = None
         self.nonlinearity_polyorder = -1
+        self.nonlinearity_flags = None
+        self.nonlinearity_flags_hdu = None
 
         self.alloc_persistency = False
 
@@ -1004,6 +1006,9 @@ class NIRWALS(object):
             nonlin = hdu['NONLINPOLY'].data
             self.cube_nonlinearity[:,:,:] = nonlin[:,:,:]
 
+            self.logger.debug("Loading nonlinearity flags for propagation to final output")
+            self.nonlinearity_flags = hdu['FLAGS'].data
+            self.nonlinearity_flags_hdu = hdu['FLAGS']
 
         # delete raw stack to clean up memory
         # del self.image_stack_raw
@@ -1896,6 +1901,15 @@ class NIRWALS(object):
             # except Exception as e:
             #     self.logger.critical(str(e))
             #     pass
+
+        self.logger.debug("Propagating nonlinearity flags to output if available")
+        if (self.nonlinearity_flags is not None):
+            _list.append(self.nonlinearity_flags_hdu)
+
+        #
+        # Add non-image extensions AFTER all image-extensions, otherwise they won't show up in ds9
+        # for whatever reason ....
+        #
 
         _list.append(pyfits.ImageHDU(header=self.header_first_read, name="READ_FIRST"))
         _list.append(pyfits.ImageHDU(header=self.header_last_read, name="READ_LAST"))
