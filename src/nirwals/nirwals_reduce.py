@@ -133,6 +133,10 @@ def main():
         if (os.path.isfile(red_full_fn)):
             if (not args.redo):
                 logger.info("output file %s already exists, skipping" % (red_full_fn))
+                try:
+                    del rss
+                except Exception as e:
+                    mplog.report_exception(e, logger)
                 continue
             else:
                 logger.info("output file %s already exists, but --redo option was given, so we'll re-reduce" % (red_full_fn))
