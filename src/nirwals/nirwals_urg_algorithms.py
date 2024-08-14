@@ -134,6 +134,74 @@ def __fit_linear_regression_error(p, times, reads, noise):
     sigma = (reads - fit) / noise
     return sigma**2
 
+
+def fit_linear_regression(reads, noise, times, x=0, y=0, recombine=False, group_cutoff=None, logger=None):
+
+    if (logger is None):
+        logger = logging.getLogger("FitLinearRegression")
+
+    good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0) & (noise > 0)
+    if (group_cutoff is not None and group_cutoff > 0):
+        good_reads[group_cutoff:] = False
+
+    n = numpy.sum(good_reads)
+    if (n < 2):
+        # not enough data to do anything with
+        return None
+
+    if (n > 10):
+        # we have enough data, skip the first N reads
+        N = 3
+        good_reads[:N] = False
+        n -= N
+
+    times = times[good_reads]
+    reads = reads[good_reads]
+    noise = noise[good_reads]
+
+    if (recombine):
+        try:
+            new_reads, recombine_corrections = recombine_signals(times, reads)
+            reads = new_reads
+        except Exception as e:
+            numpy.savetxt("recombine_dump_%d_%d.dat" % (x, y), numpy.array([times, reads]).T)
+            logger.warning("Recombine failed for x/y = %d/%d: %s" % (x, y, str(e)))
+
+    # slope = (n * numpy.sum(times*reads) - numpy.sum(times)*numpy.sum(reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+    # intercept = (numpy.sum(times**2)*numpy.sum(reads) - numpy.sum(times)*numpy.sum(times*reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+    slope, intercept = fit_line(times, reads)
+    p0 = [intercept, slope]
+
+    best_fit = [numpy.NaN, numpy.NaN]
+    perr = [numpy.NaN, numpy.NaN]
+    if (n >= 2):
+        # Only attempt to fit a slope if we have at least 2 points
+        try:
+            results = scipy.optimize.leastsq(
+                func=__fit_linear_regression_error,
+                x0=p0,
+                args=(times, reads, noise),
+                full_output=True,
+            )
+            best_fit, pcov, infodict, mesg, ier = results
+            perr = numpy.sqrt(numpy.diag(pcov))
+        except:
+            pass
+
+    max_t = numpy.max(times)
+    n_samples = times.shape[0]
+
+    # get the pair-wise sampling of all parameters (times, reads, and noise)
+    weighted = best_fit[1]
+    _med = slope
+    _sigma = perr[1]
+    n_useful_pairs = n  # perr[0]
+
+    return weighted, _med, _sigma, n_useful_pairs, max_t, intercept
+
+
+
+
 def worker__fit_linear_regression(
         shmem_cube_corrected, shmem_results, cube_shape, results_shape,
         jobqueue, read_times, workername=None, group_cutoff=None,
@@ -146,6 +214,10 @@ def worker__fit_linear_regression(
                              buffer=shmem_cube_corrected.buf)
     cube_results = numpy.ndarray(shape=results_shape, dtype=numpy.float32,
                              buffer=shmem_results.buf)
+
+    # FIX ME
+    gain = 2
+    readnoise = 20
 
     while (True):
         try:
@@ -167,65 +239,17 @@ def worker__fit_linear_regression(
         for x in range(4, cube_results.shape[2]-4 ):
 
             reads = cube_linearized[:,y,x]
-            noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
+            noise = numpy.sqrt(reads * gain + readnoise**2) / gain # TODO: THIS NEEDS FIXING
             times = numpy.array(read_times)
 
-            good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0) & (noise>0)
-            if (group_cutoff is not None and group_cutoff>0):
-                good_reads[group_cutoff:] = False
-
-            n = numpy.sum(good_reads)
-            if (n < 2):
-                # not enough data to do anything with
+            result = fit_linear_regression(
+                reads, noise, times, recombine=recombine, group_cutoff=group_cutoff, logger=logger,
+                x=x, y=y,
+            )
+            if (result is None):
                 continue
-
-            if (n > 10):
-                # we have enough data, skip the first N reads
-                N = 3
-                good_reads[:N] = False
-                n -= N
-
-            times = times[good_reads]
-            reads = reads[good_reads]
-            noise = noise[good_reads]
-
-            if (recombine):
-                try:
-                    new_reads, recombine_corrections = recombine_signals(times, reads)
-                    reads = new_reads
-                except Exception as e:
-                    numpy.savetxt("recombine_dump_%d_%d.dat" % (x,y), numpy.array([times, reads]).T)
-                    logger.warning("Recombine failed for x/y = %d/%d: %s" % (x,y, str(e)))
-
-            # slope = (n * numpy.sum(times*reads) - numpy.sum(times)*numpy.sum(reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
-            # intercept = (numpy.sum(times**2)*numpy.sum(reads) - numpy.sum(times)*numpy.sum(times*reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
-            slope, intercept = fit_line(times, reads)
-            p0 = [intercept, slope]
-
-            best_fit = [numpy.NaN, numpy.NaN]
-            perr = [numpy.NaN, numpy.NaN]
-            if (n >= 2):
-                # Only attempt to fit a slope if we have at least 2 points
-                try:
-                    results = scipy.optimize.leastsq(
-                        func=__fit_linear_regression_error,
-                        x0=p0,
-                        args=(times, reads, noise),
-                        full_output=True,
-                    )
-                    best_fit, pcov, infodict, mesg, ier = results
-                    perr = numpy.sqrt(numpy.diag(pcov))
-                except:
-                    pass
-
-            max_t = numpy.max(times)
-            n_samples = times.shape[0]
-
-            # get the pair-wise sampling of all parameters (times, reads, and noise)
-            weighted = best_fit[1]
-            _med = slope
-            _sigma = perr[1]
-            n_useful_pairs = n #perr[0]
+            else:
+                weighted, _med, _sigma, n_useful_pairs, max_t, intercept = result
 
             cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
 
