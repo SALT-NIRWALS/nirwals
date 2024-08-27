@@ -3,6 +3,7 @@ import time
 import logging
 import numpy
 import queue
+import multiparlog as mplog
 
 import scipy.optimize
 
@@ -56,7 +57,7 @@ def worker__fit_rauscher2007(
         jobqueue, read_times, workername=None, group_cutoff=None, recombine=False, **kwargs,
 ):
     logger = logging.getLogger(workername if workername is not None else "Rauscher2007worker")
-    logger.debug("Starting worker")
+    logger.debug("Starting worker: %s" % (workername))
 
     cube_linearized = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
                              buffer=shmem_cube_corrected.buf)
@@ -86,42 +87,46 @@ def worker__fit_rauscher2007(
             noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
             times = numpy.array(read_times)
 
-            if (recombine):
-                reads, recombine_corrections = recombine_signals(times, reads)
+            try:
+                if (recombine):
+                    reads, recombine_corrections = recombine_signals(times, reads)
 
-            good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0)
-            if (group_cutoff is not None and group_cutoff>0):
-                good_reads[group_cutoff:] = False
+                good_reads = numpy.isfinite(reads) & numpy.isfinite(noise) & numpy.isfinite(times) & (times >= 0)
+                if (group_cutoff is not None and group_cutoff>0):
+                    good_reads[group_cutoff:] = False
 
-            if (numpy.sum(good_reads) < 2):
-                # not enough data to do anything with
-                continue
+                if (numpy.sum(good_reads) < 2):
+                    # not enough data to do anything with
+                    continue
 
-            times = times[good_reads]
-            reads = reads[good_reads]
-            noise = noise[good_reads]
-            n = numpy.sum(good_reads)
+                times = times[good_reads]
+                reads = reads[good_reads]
+                noise = noise[good_reads]
+                n = numpy.sum(good_reads)
 
-            rauscher_b = (n * numpy.sum(times*reads) - numpy.sum(times)*numpy.sum(reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
-            rauscher_a = (numpy.sum(times**2)*numpy.sum(reads) - numpy.sum(times)*numpy.sum(times*reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+                rauscher_b = (n * numpy.sum(times*reads) - numpy.sum(times)*numpy.sum(reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
+                rauscher_a = (numpy.sum(times**2)*numpy.sum(reads) - numpy.sum(times)*numpy.sum(times*reads)) / (n*numpy.sum(times**2) - numpy.sum(times)**2)
 
-            max_t = numpy.max(times)
-            n_samples = times.shape[0]
+                max_t = numpy.max(times)
+                n_samples = times.shape[0]
 
-            # get the pair-wise sampling of all parameters (times, reads, and noise)
-            weighted = rauscher_b
-            _med = 0
-            _sigma = 0
-            n_useful_pairs = n
+                # get the pair-wise sampling of all parameters (times, reads, and noise)
+                weighted = rauscher_b
+                _med = 0
+                _sigma = 0
+                n_useful_pairs = n
 
-            cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
+                cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
+            except Exception as e:
+                mplog.log_exception()
+                logger.warn("Exception while processing (rauscher2007) pixel @ x=%d, y=%d: %s" % (x, y, str(e)))
 
         t2 = time.time()
         logger.debug("Fitting rauscher2007 for row %d done after %.3f seconds" % (y, t2-t1))
 
         jobqueue.task_done()
 
-    logger.debug("Shutting down")
+    logger.debug("Shutting down %s" % (workername))
     shmem_results.close()
     shmem_cube_corrected.close()
 
@@ -159,6 +164,8 @@ def fit_linear_regression(reads, noise, times, x=0, y=0, recombine=False, group_
     reads = reads[good_reads]
     noise = noise[good_reads]
 
+    new_reads = None
+    recombine_corrections = None
     if (recombine):
         try:
             new_reads, recombine_corrections = recombine_signals(times, reads)
@@ -208,7 +215,7 @@ def worker__fit_linear_regression(
         recombine=False, **kwargs,
 ):
     logger = logging.getLogger(workername if workername is not None else "LinearRegressionWorker")
-    logger.debug("Starting worker")
+    logger.debug("Starting worker: %s" % (workername))
 
     cube_linearized = numpy.ndarray(shape=cube_shape, dtype=numpy.float32,
                              buffer=shmem_cube_corrected.buf)
@@ -238,27 +245,31 @@ def worker__fit_linear_regression(
 
         for x in range(4, cube_results.shape[2]-4 ):
 
-            reads = cube_linearized[:,y,x]
-            noise = numpy.sqrt(reads * gain + readnoise**2) / gain # TODO: THIS NEEDS FIXING
-            times = numpy.array(read_times)
+            try:
+                reads = cube_linearized[:,y,x]
+                noise = numpy.sqrt(reads * gain + readnoise**2) / gain # TODO: THIS NEEDS FIXING
+                times = numpy.array(read_times)
 
-            result = fit_linear_regression(
-                reads, noise, times, recombine=recombine, group_cutoff=group_cutoff, logger=logger,
-                x=x, y=y,
-            )
-            if (result is None):
-                continue
-            else:
-                weighted, _med, _sigma, n_useful_pairs, max_t, intercept = result
+                result = fit_linear_regression(
+                    reads, noise, times, recombine=recombine, group_cutoff=group_cutoff, logger=logger,
+                    x=x, y=y,
+                )
+                if (result is None):
+                    continue
+                else:
+                    weighted, _med, _sigma, n_useful_pairs, max_t, intercept = result
 
-            cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
+                cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
+            except Exception as e:
+                mplog.log_exception()
+                logger.warn("Exception while processing (linreg) pixel @ x=%d, y=%d: %s" % (x, y, str(e)))
 
         t2 = time.time()
-        logger.debug("Fitting rauscher2007 for row %d done after %.3f seconds" % (y, t2-t1))
+        logger.debug("Fitting linear_regression for row %d done after %.3f seconds" % (y, t2-t1))
 
         jobqueue.task_done()
 
-    logger.debug("Shutting down")
+    logger.debug("Shutting down: %s" % (workername))
     shmem_results.close()
     shmem_cube_corrected.close()
 

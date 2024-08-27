@@ -1793,6 +1793,7 @@ class NIRWALS(object):
         # wait for work to be done
         self.logger.info("Waiting for all URG-fitting jobs to finish")
         jobqueue.join()
+        self.logger.debug("Shutting down workers")
         for p in worker_processes:
             p.join()
 
