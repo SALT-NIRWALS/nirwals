@@ -1686,7 +1686,7 @@ class NIRWALS(object):
         # pyfits.PrimaryHDU(data=self.cube_linearized).writeto("cube_before_nonlin.fits", overwrite=True)
 
         self.logger.info("Starting nonlinearity correction")
-        self.provenance.add("non-linearity", os.path.abspath(self.nonlin_fn))
+        self.provenance.add("non-linearity", "not-selected" if self.nonlin_fn is None else os.path.abspath(self.nonlin_fn))
 
         t1 = time.time()
         jobqueue = multiprocessing.JoinableQueue()
