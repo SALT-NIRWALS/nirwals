@@ -819,7 +819,7 @@ class NIRWALS(object):
             self.ref_hdulist = pyfits.open(self.fn)
             self.ref_header = self.ref_hdulist[0].header
         except:
-            self.logger.critical("Unable to open input file (%s)" % (os.path.abspath(fn)))
+            self.logger.critical("Unable to open input file (%s)" % (os.path.abspath(self.fn)))
         self.provenance.add("ref-header", os.path.abspath(self.fn))
 
         # image dimensions
