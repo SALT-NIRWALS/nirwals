@@ -64,6 +64,10 @@ def worker__fit_rauscher2007(
     cube_results = numpy.ndarray(shape=results_shape, dtype=numpy.float32,
                              buffer=shmem_results.buf)
 
+    # FIX ME
+    gain = 2
+    readnoise = 20
+
     while (True):
         try:
             job = jobqueue.get()
@@ -84,7 +88,7 @@ def worker__fit_rauscher2007(
         for x in range(4, cube_results.shape[2]-4 ):
 
             reads = cube_linearized[:,y,x]
-            noise = numpy.sqrt(reads) # TODO: THIS NEEDS FIXING
+            noise = numpy.sqrt(reads * gain + readnoise**2) / gain # TODO: THIS NEEDS FIXING
             times = numpy.array(read_times)
 
             try:
