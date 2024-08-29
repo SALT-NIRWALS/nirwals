@@ -123,7 +123,7 @@ def worker__fit_rauscher2007(
                 cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
             except Exception as e:
                 mplog.log_exception()
-                logger.warn("Exception while processing (rauscher2007) pixel @ x=%d, y=%d: %s" % (x, y, str(e)))
+                logger.warning("Exception while processing (rauscher2007) pixel @ x=%d, y=%d: %s" % (x, y, str(e)))
 
         t2 = time.time()
         logger.debug("Fitting rauscher2007 for row %d done after %.3f seconds" % (y, t2-t1))
@@ -266,7 +266,7 @@ def worker__fit_linear_regression(
                 cube_results[:,y,x] = [weighted, _med, _sigma, n_useful_pairs, max_t]
             except Exception as e:
                 mplog.log_exception()
-                logger.warn("Exception while processing (linreg) pixel @ x=%d, y=%d: %s" % (x, y, str(e)))
+                logger.warning("Exception while processing (linreg) pixel @ x=%d, y=%d: %s" % (x, y, str(e)))
 
         t2 = time.time()
         logger.debug("Fitting linear_regression for row %d done after %.3f seconds" % (y, t2-t1))
