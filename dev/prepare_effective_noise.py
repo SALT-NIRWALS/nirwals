@@ -43,6 +43,9 @@ if __name__ == "__main__":
                          help="number of CPU cores to use")
     cmdline.add_argument("--maxfiles", dest="max_number_files", default=None, type=int,
                          help="limit number of files to load for processing")
+    cmdline.add_argument("--algorithm", dest="algorithm", default='linreg', type=str,
+                         choices={"linreg", "rauscher2007", 'pairwise', 'linreg+recombine', 'rauscher2007+recombine'},
+                         help="number of CPU cores to use")
     cmdline.add_argument("files", nargs="+",
                          help="list of input filenames")
     args = cmdline.parse_args()
@@ -51,7 +54,7 @@ if __name__ == "__main__":
     rss = nirwals.NIRWALS(
         fn=args.files[0],
         max_number_files=args.max_number_files,
-        use_reference_pixels='blockyslope2',
+        use_reference_pixels=args.ref_pixel_mode,
         saturation=53000,
         nonlinearity=args.nonlinearity_fn,
         logger_name="Nirwals",
@@ -77,7 +80,7 @@ if __name__ == "__main__":
 
     for grps in n_groups:
         print("\nWorking on %d groups\n" % (grps))
-        rss.fit_pairwise_slopes(algorithm="rauscher2007", group_cutoff=grps)
+        rss.fit_pairwise_slopes(algorithm=args.algorithm, group_cutoff=grps)
 
         img_hdu = pyfits.ImageHDU(data=numpy.array(rss.cube_results[0]))
         img_hdu.header['N_GRPS'] = grps
