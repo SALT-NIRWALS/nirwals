@@ -127,9 +127,27 @@ only to be used for debugging:
   data cube. Use rssnir_makedark.py to generate the dark calibration frame. Currently
   not implemented since unstable dark-currents do not improve output data quality.
 
-:kbd:`--gain`
+:kbd:`--gain=none|plain|full|average`
   Correct final results with each amplifier gain; gain values are shipped with the code itself,
   and are automatically selected based on the data the data was taken.
+
+  Options are:
+
+  * ``none`` -- No gain correction applied
+
+  * ``plain`` -- apply generic gain=2 correction to all amplifiers
+
+  * ``full`` -- apply a per-amplifier gain; when implemented, this functionality will look up the best gain
+    numbers to use based on time of observations; at the moment only the values determined during commissioning
+    are available. Note: Due to noise issues applying the ``full`` option actually introduces amplifier banding
+    variations, so this option is NOT recommended.
+
+  * ``average`` -- Use the time-dependent per-amplifier gains as in ``full``, but instead of applying each gain
+    to each amplifier this option first derives a global, average gain (mean gain across all amplifiers), and then
+    applies this average gain across all amplifiers. The result is a more realistic gain (~1.9 as compared to the
+    generic 2.0), but without the banding issues of the ``full`` option.
+
+  The selected gain option as well as all individual amplifier gains are also recorded in the provenance metadata.
 
 Example call::
 
