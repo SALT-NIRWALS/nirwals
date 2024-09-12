@@ -62,15 +62,12 @@ def main():
     cmdline.add_argument("--every", dest="every", default=None, type=int,
                          help="read only every n-th frame [only use for testing, NOT in production]")
 
-    # cmdline.add_argument("healpix32", nargs="+", type=int,
-    #                      help="list of input filenames")
-    # cmdline.add_argument("--rerun", type=int, default=6,
-    #                      help="rerun")
     cmdline.add_argument("--dumps", dest="write_dumps", default=None,
                          help="write intermediate process data [default: NO]")
     cmdline.add_argument("--redo", dest="redo", default=False, action='store_true',
                          help="re-run data reduction even if output file already exists")
-    cmdline.add_argument("--gain", dest="gain", default=False, action='store_true',
+    cmdline.add_argument("--gain", dest="gain_correction", default=None, type=str,
+                         choices={"plain", 'full', "none", "average"},
                          help="Apply automatic gain correction")
     cmdline.add_argument("--debugpngs", dest="write_debug_pngs", default=False, action='store_true',
                          help="generate debug plots for all pixels with persistency [default: NO]")
@@ -110,7 +107,7 @@ def main():
                       n_cores=args.n_cores,
                       dumps=dumpfiles,
                       every=args.every,
-                      correct_gain=args.gain,
+                      correct_gain=args.gain_correction,
                       )
         except Exception as e:
             logger.critical("Unable to start processing, read and resolve error message before continuing")

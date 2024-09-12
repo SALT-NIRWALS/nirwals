@@ -836,8 +836,9 @@ class NIRWALS(object):
         self.exptime = self.ref_header['USEREXP'] / 1000.
         self.diff_exptime = self.exptime / self.n_groups
 
-        if (self.correct_gain):
-            self.gain = nirwals.data.NirwalsGain(self.ref_header)
+        if (self.correct_gain is not None):
+            self.logger.debug("Selecting GAIN (w/ header): %s" % (self.correct_gain))
+            self.gain = nirwals.data.NirwalsGain(header=self.ref_header, gain_mode=self.correct_gain)
 
 
     def get_full_filelist(self):
@@ -1211,6 +1212,12 @@ class NIRWALS(object):
         if (self.correct_gain):
             self.apply_gain_correction()
             self.provenance.add('gain', self.gain.get_name())
+            try:
+                for amp, _gain in enumerate(self.gain.get_gains()):
+                    self.provenance.add('gain_amp%02d' % (amp+1), _gain)
+            except:
+                mplog.log_exception(self.logger)
+                pass
         else:
             self.provenance.add('gain', 'no-gain-correction')
 
